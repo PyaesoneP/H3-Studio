@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H3 Studio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">H3</span> Studio <small>MiniMax H3 · ComfyUI</small></div>
+  <nav class="tabs" id="tabs">
+    <button data-mode="t2i" class="on">Text → Image</button>
+    <button data-mode="i2i">Image → Image</button>
+    <button data-mode="multi">Multi-image → Image</button>
+    <button data-mode="video">Video</button>
+  </nav>
+  <div class="status">
+    <span id="conn" class="dot off" title="ComfyUI connection"></span>
+    <span id="connText">offline</span>
+    <span id="vram" class="muted"></span>
+    <button id="startComfy" class="ghost hidden">Start ComfyUI</button>
+    <button id="freeMem" class="ghost" title="Unload models and free VRAM">Free VRAM</button>
+  </div>
+</header>
+
+<main>
+<form id="form" class="panel" autocomplete="off" onsubmit="return false">
+
+  <!-- ───── Inputs ───── -->
+  <section data-show="i2i">
+    <h3>Source image <span class="tag">&lt;Picture 1&gt;</span></h3>
+    <div class="slots" id="slots-i2i" data-list="i2i" data-max="1" data-kind="image" data-tag="Picture"></div>
+  </section>
+
+  <section data-show="multi">
+    <h3>Pictures <small class="muted">Picture 1 is the source; up to 8 more references. Drag cards to reorder.</small></h3>
+    <div class="slots" id="slots-multi" data-list="multi" data-max="9" data-kind="image" data-tag="Picture"></div>
+  </section>
+
+  <section data-show="video">
+    <h3>Video mode</h3>
+    <div class="seg" id="vmodeSeg">
+      <label><input type="radio" name="vmode" value="t2v" data-persist checked><span>Text → Video</span></label>
+      <label><input type="radio" name="vmode" value="first" data-persist><span>First frame</span></label>
+      <label><input type="radio" name="vmode" value="firstlast" data-persist><span>First + last frame</span></label>
+      <label><input type="radio" name="vmode" value="ref" data-persist><span>References → Video</span></label>
+    </div>
+    <div class="row frames" data-vshow="first firstlast">
+      <div><h4>First frame</h4><div class="slots" data-list="first" data-max="1" data-kind="image"></div></div>
+      <div data-vshow="firstlast"><h4>Last frame</h4><div class="slots" data-list="last" data-max="1" data-kind="image"></div></div>
+    </div>
+    <div data-vshow="ref">
+      <h4>Reference images <small class="muted">up to 9 · &lt;Picture N&gt;</small></h4>
+      <div class="slots" data-list="refImg" data-max="9" data-kind="image" data-tag="Picture"></div>
+      <h4>Reference videos <small class="muted">up to 3 · 2–15 s · &lt;Video N&gt;</small></h4>
+      <div class="slots" data-list="refVid" data-max="3" data-kind="video" data-tag="Video"></div>
+      <h4>Reference audio <small class="muted">up to 3 · &lt;Audio N&gt;</small></h4>
+      <div class="slots" data-list="refAud" data-max="3" data-kind="audio" data-tag="Audio"></div>
+      <div class="grid2">
+        <label>Reference image size
+          <select id="refSize" data-persist><option value="match">match (generation area, faster)</option><option value="max">max (2048 px, best identity, slower)</option></select></label>
+        <label class="check"><input type="checkbox" id="refVidAudio" data-persist checked> Use each reference video's soundtrack</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── Prompt ───── -->
+  <section>
+    <h3 id="promptLabel">Prompt</h3>
+    <div class="chips" id="tagChips"></div>
+    <textarea id="prompt" data-persist rows="7" placeholder="Describe the image…"></textarea>
+    <div class="row between">
+      <span class="muted small" id="promptHint"></span>
+      <span class="muted small" id="promptCount"></span>
+    </div>
+  </section>
+
+  <!-- ───── Keyframe guides (video) ───── -->
+  <section data-show="video">
+    <h3>Keyframe guides <small class="muted">anchor an image or a sound at any frame</small></h3>
+    <div id="guides"></div>
+    <div class="row">
+      <button type="button" class="ghost" id="addGuideImg">+ Image guide</button>
+      <button type="button" class="ghost" id="addGuideAud">+ Audio guide</button>
+    </div>
+  </section>
+
+  <!-- ───── Canvas ───── -->
+  <section data-show="t2i i2i multi">
+    <h3>Canvas</h3>
+    <div class="grid3">
+      <label>Aspect ratio <select id="aspect" data-persist></select></label>
+      <label>Megapixels <input type="number" id="mp" data-persist value="3" min="0.1" max="32" step="0.1"></label>
+      <div class="presets"><span class="muted small">MP</span>
+        <button type="button" data-mp="1">1</button><button type="button" data-mp="1.5">1.5</button>
+        <button type="button" data-mp="3">3</button><button type="button" data-mp="4">4</button><button type="button" data-mp="8">8</button></div>
+    </div>
+    <div class="grid3" data-custom>
+      <label>Width <input type="number" id="width" data-persist value="2048" min="64" max="16384" step="32"></label>
+      <label>Height <input type="number" id="height" data-persist value="1536" min="64" max="16384" step="32"></label>
+      <div></div>
+    </div>
+    <p class="muted small" id="canvasOut"></p>
+  </section>
+
+  <section data-show="video">
+    <h3>Canvas & duration</h3>
+    <div class="grid3">
+      <label>Aspect <select id="vAspect" data-persist>
+        <option value="16:9">16:9 landscape</option><option value="9:16">9:16 portrait</option>
+        <option value="1:1">1:1 square</option><option value="4:3">4:3</option><option value="3:4">3:4</option>
+        <option value="3:2">3:2</option><option value="2:3">2:3</option><option value="21:9">21:9 cinema</option>
+        <option value="first">match first frame</option><option value="custom">custom pixels</option></select></label>
+      <label>Size <select id="vSize" data-persist>
+        <option value="0.2">Draft · 0.2 MP</option><option value="0.4" selected>Preview · 0.4 MP</option>
+        <option value="0.6">0.6 MP</option><option value="0.8">0.8 MP</option>
+        <option value="native">Native · 768 short edge (≈1 MP)</option></select></label>
+      <div></div>
+    </div>
+    <div class="grid3">
+      <label>Width <input type="number" id="vWidth" data-persist value="864" min="32" max="4096" step="32"></label>
+      <label>Height <input type="number" id="vHeight" data-persist value="480" min="32" max="4096" step="32"></label>
+      <div></div>
+    </div>
+    <div class="grid3">
+      <label>Duration (s) <input type="range" id="vSec" data-persist min="0.5" max="15" step="0.25" value="5"></label>
+      <label>Frame rate (output) <input type="number" id="vFps" data-persist value="24" min="1" max="120" step="1"></label>
+      <div class="muted small" id="durOut"></div>
+    </div>
+    <p class="muted small">H3 samples at 24 fps on a 17k+5 frame grid; trained range ≈ 5–15 s (124–362 frames). Native area cap 768×1344.</p>
+  </section>
+
+  <!-- ───── Sampling ───── -->
+  <section>
+    <h3>Sampling</h3>
+    <div class="presets wide" id="presetBtns"></div>
+    <div class="grid3">
+      <label>Steps <input type="number" id="steps" data-persist value="50" min="1" max="200"></label>
+      <label>Sampler <select id="sampler" data-persist></select></label>
+      <label>Scheduler <select id="scheduler" data-persist></select></label>
+    </div>
+    <div class="grid3">
+      <label>Seed <span class="inline"><input type="number" id="seed" data-persist value="42" min="0"><button type="button" class="ghost" id="dice" title="Random seed">Random</button></span></label>
+      <label>After each run <select id="seedMode" data-persist><option value="fixed">keep seed</option><option value="increment">increment</option><option value="random">randomize</option></select></label>
+      <label>Batch count <input type="number" id="batch" data-persist value="1" min="1" max="64"></label>
+    </div>
+    <div data-show="video" class="grid3">
+      <label class="check"><input type="checkbox" id="shiftOn" data-persist> Override sigma shift</label>
+      <label>Video shift <input type="number" id="shiftV" data-persist value="12" min="0.01" max="100" step="0.01"></label>
+      <label>Audio shift <input type="number" id="shiftA" data-persist value="3" min="0.01" max="100" step="0.01"></label>
+    </div>
+  </section>
+
+  <!-- ───── Models ───── -->
+  <details class="sec" open>
+    <summary>Models &amp; LoRAs</summary>
+    <div class="grid3">
+      <label>Diffusion model <select id="model" data-persist></select></label>
+      <label>Text encoder <select id="te" data-persist></select></label>
+      <label>Video VAE <select id="vae" data-persist></select></label>
+    </div>
+    <div class="grid3" data-show="video">
+      <label>Audio VAE <select id="avae" data-persist></select></label>
+      <label>Weight dtype <select id="dtype" data-persist></select></label>
+      <div></div>
+    </div>
+    <h4>LoRA stack <small class="muted">applied in order; strength 0 or None is skipped</small></h4>
+    <div id="loras"></div>
+    <button type="button" class="ghost" id="addLora">+ LoRA</button>
+  </details>
+
+  <!-- ───── Output ───── -->
+  <details class="sec">
+    <summary>Output</summary>
+    <div class="grid3">
+      <label>Filename prefix <input type="text" id="prefix" data-persist value="h3studio/img"></label>
+      <label data-show="video">Container <select id="vFormat" data-persist><option>auto</option><option>mp4</option><option>mkv</option><option>webm</option></select></label>
+      <label data-show="video">Codec <select id="vCodec" data-persist><option>auto</option><option>h264</option><option>av1</option></select></label>
+    </div>
+    <div class="grid3" data-show="video">
+      <label>H.264 CRF <small class="muted">(blank = auto)</small><input type="number" id="vCrf" data-persist min="0" max="51" step="1" placeholder="auto"></label>
+      <label>Bit depth <select id="vBits" data-persist><option value="auto">auto</option><option value="8">8</option><option value="10">10</option></select></label>
+      <label>Colour space <select id="vColor" data-persist><option>sRGB</option><option>HDR</option><option>HDR PQ</option></select></label>
+    </div>
+    <label class="check" data-show="video"><input type="checkbox" id="vAudio" data-persist checked> Include generated audio track</label>
+  </details>
+
+  <div class="actions">
+    <button type="button" id="go" class="primary">Generate <kbd>Ctrl ↵</kbd></button>
+    <button type="button" id="showApi" class="ghost">API JSON</button>
+    <button type="button" id="interrupt" class="ghost">Interrupt</button>
+    <button type="button" id="clearQueue" class="ghost">Clear queue</button>
+  </div>
+  <div id="err" class="err hidden"></div>
+</form>
+
+<aside class="results">
+  <div class="runbar">
+    <div class="row between"><b id="runTitle">Idle</b><span class="muted small" id="queueInfo"></span></div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="muted small" id="runNode"></div>
+  </div>
+  <div class="row between"><h3>Results</h3><button class="ghost small" id="clearGallery">Clear list</button></div>
+  <div id="gallery"></div>
+</aside>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="sheet">
+    <button class="close" id="modalClose">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+<input type="file" id="filePick" class="hidden">
+<script src="/static/app.js"></script>
+</body>
+</html>
