@@ -13,7 +13,9 @@ const DEFAULTS = {
   video: { steps: 20, sampler: 'res_multistep', scheduler: 'simple', prefix: 'video/h3studio' },
 };
 const NODES = ['H3StudioModels', 'H3StudioEdit', 'H3StudioGenerate', 'H3StudioRender', 'UNETLoader', 'UnetLoaderGGUF',
-  'CLIPLoader', 'VAELoader', 'KSamplerSelect', 'BasicScheduler', 'LoraLoaderModelOnly', 'MiniMaxH3ReferenceToVideo'];
+  'CLIPLoader', 'VAELoader', 'KSamplerSelect', 'BasicScheduler', 'LoraLoaderModelOnly', 'MiniMaxH3ReferenceToVideo', 'KSampler'];
+const IMG_CKPT = 'minimax_h3_image_pruned_int8_convrot.safetensors';
+const officialImage = () => /h3_image/i.test(val('model'));
 
 const S = {
   mode: 't2i', info: {}, online: false, runs: [], byId: {}, ws: null, active: null,
@@ -89,9 +91,16 @@ function fillModeOptions() {
     fill('avae', vaes.filter(n => /minimax_h3_audio_vae/i.test(n)));
     fill('dtype', opts('UNETLoader', 'weight_dtype'), 'default');
   } else {
-    fill('model', opts('H3StudioModels', 'diffusion_model'), 'minimax_h3_fl2va_pruned_int8_convrot.safetensors');
-    fill('te', opts('H3StudioModels', 'text_encoder'));
-    fill('vae', opts('H3StudioModels', 'video_vae'), 'minimax_h3_video_vae_fp16.safetensors');
+    const unet = opts('UNETLoader', 'unet_name').filter(n => /h3|fl2va|minimax/i.test(n));
+    const gguf = opts('UnetLoaderGGUF', 'unet_name').filter(n => /h3/i.test(n));
+    fill('model', [...unet, ...gguf], unet.includes(IMG_CKPT) ? IMG_CKPT : 'minimax_h3_fl2va_pruned_int8_convrot.safetensors');
+    fill('te', opts('CLIPLoader', 'clip_name').filter(n => /minimax|qwen3vl/i.test(n)));
+    const vaes = opts('VAELoader', 'vae_name');
+    const off = unet.includes(val('model')) && /h3_image/i.test(val('model'));
+    fill('vae', off ? vaes.filter(n => /minimax_h3_image_vae/i.test(n)) : vaes.filter(n => /minimax_h3_video_vae/i.test(n)),
+      off ? 'minimax_h3_image_vae_fp16.safetensors' : 'minimax_h3_video_vae_fp16.safetensors');
+    fill('avae', vaes.filter(n => /minimax_h3_audio_vae/i.test(n)));
+    if (off && +val('steps') === 50 && val('sampler') === 'er_sde') { setVal('steps', 6); setVal('sampler', 'euler'); setVal('scheduler', 'simple'); }
     const aspects = m === 't2i' ? opts('H3StudioGenerate', 'aspect_ratio') : opts('H3StudioEdit', 'aspect_ratio');
     fill('aspect', aspects, m === 't2i' ? '1:1 square' : 'source image');
   }
@@ -249,6 +258,7 @@ function renderPresets() {
     ['Draft · 0.2 MP · 3 s', () => { setVal('vSize', '0.2'); setVal('vSec', 3); if (val('vAspect') === 'custom') setVal('vAspect', '16:9'); }],
     ['Final · native size', () => { setVal('vSize', 'native'); if (val('vAspect') === 'custom') setVal('vAspect', '16:9'); }],
   ] : [
+    officialImage() && ['H3-Image official · 6 steps CFG1', () => { S.loras = []; setVal('steps', 6); setVal('sampler', 'euler'); setVal('scheduler', 'simple'); }],
     ['Quality · 50 steps, no LoRA', () => { S.loras = []; setVal('steps', 50); setVal('sampler', 'er_sde'); setVal('scheduler', 'simple'); }],
     t && ['Turbo · Larry v4 @0.38 · 20 steps', () => { S.loras = [{ name: t, strength: 0.38 }]; setVal('steps', 20); }],
     t && ['Preview · 1 MP turbo', () => { S.loras = [{ name: t, strength: 0.38 }]; setVal('steps', 20); setVal('mp', 1); }],
@@ -398,6 +408,7 @@ const L = (k, i = 0) => [k, i];
 
 function buildImage(seed) {
   const m = S.mode, g = Graph();
+  if (officialImage()) return buildOfficialImage(g, seed);
   let models = g.add('H3StudioModels', { diffusion_model: val('model'), text_encoder: val('te'), video_vae: val('vae'), turbo_lora: 'None' });
   for (const l of S.loras) if (l.name !== 'None' && +l.strength !== 0)
     models = g.add('H3StudioLoRA', { models: L(models), lora_name: l.name, strength_model: +l.strength });
@@ -413,6 +424,34 @@ function buildImage(seed) {
   const r = g.add('H3StudioRender', { image_job: L(job), steps: +val('steps'), seed, sampler_name: val('sampler'), scheduler: val('scheduler') });
   g.add('SaveImage', { images: L(r), filename_prefix: val('prefix') });
   g.add('PreviewAny', { source: L(r, 1) });
+  return g.p;
+}
+
+/* Official standalone MiniMax-H3-Image checkpoint: core nodes, CFG 1, no video VAE. */
+function buildOfficialImage(g, seed) {
+  const m = S.mode;
+  let model = g.add('UNETLoader', { unet_name: val('model'), weight_dtype: 'default' });
+  for (const l of S.loras) if (l.name !== 'None' && +l.strength !== 0)
+    model = g.add('LoraLoaderModelOnly', { model: L(model), lora_name: l.name, strength_model: +l.strength });
+  const clip = g.add('CLIPLoader', { clip_name: val('te'), type: 'minimax', device: 'default' });
+  const vae = g.add('VAELoader', { vae_name: val('vae') });
+  const c = imgCanvas() || [r32(Math.sqrt(+val('mp') * MB)), r32(Math.sqrt(+val('mp') * MB))];
+  const inputs = { clip: L(clip), vae: L(vae), prompt: val('prompt'), width: c[0], height: c[1] };
+  if (m !== 't2i') {
+    const pics = m === 'i2i' ? S.lists.i2i : S.lists.multi;
+    pics.forEach((a, i) => { inputs[`images.image_${i + 1}`] = L(g.add('LoadImage', { image: loaderName(a) })); });
+  }
+  const cond = g.add('MiniMaxH3ImageConditioning', inputs);
+  const neg = g.add('ConditioningZeroOut', { conditioning: L(cond, 0) });
+  const ksam = opts('KSampler', 'sampler_name');
+  const ks = g.add('KSampler', {
+    model: L(model), positive: L(cond, 0), negative: L(neg), latent_image: L(cond, 1),
+    seed, steps: +val('steps'), cfg: 1,
+    sampler_name: ksam.includes(val('sampler')) ? val('sampler') : 'euler',
+    scheduler: 'simple', denoise: 1,
+  });
+  const dec = g.add('VAEDecodeTiled', { samples: L(ks), vae: L(vae), tile_size: 1024, overlap: 64, temporal_size: 64, temporal_overlap: 8 });
+  g.add('SaveImage', { images: L(dec), filename_prefix: val('prefix') });
   return g.p;
 }
 
@@ -480,6 +519,7 @@ function check() {
   if (!val('model')) errs.push('No MiniMax H3 diffusion model found in ComfyUI.');
   if (m === 'i2i' && !S.lists.i2i.length) errs.push('Add the source image.');
   if (m === 'multi' && !S.lists.multi.length) errs.push('Add at least Picture 1.');
+  if (m !== 'video' && officialImage() && !val('vae')) errs.push('No MiniMax H3 image VAE found.');
   if (m === 'video') {
     if ((vm === 'first' || vm === 'firstlast') && !S.lists.first.length) errs.push('Add the first frame.');
     if (vm === 'firstlast' && !S.lists.last.length) errs.push('Add the last frame.');
