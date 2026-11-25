@@ -4,7 +4,7 @@ All notable changes to H3 Studio are recorded here. This project is pre-release:
 
 ## [v0.2.0-beta.1] — draft
 
-Status: **draft pre-release** — not published. Covers the uncommitted working tree on `main`; the tag should point at a commit containing this work (see below).
+Status: **draft pre-release** — not published yet. The `v0.2.0-beta.1` tag points at the commit containing this work.
 
 ### Added
 
@@ -16,7 +16,7 @@ Status: **draft pre-release** — not published. Covers the uncommitted working 
 
 ### Changed
 
-- README rewritten to document the current feature set and point at `docs/`.
+- README rewritten: adds a system-requirements section (POSIX + lsof, ComfyUI + MiniMax H3 nodes or the official checkpoint path, Python 3.12+ with `aiohttp`, a modern browser) and points at `docs/`.
 - `server.py`: `/docs` static serving (the vendored guides shown by the builder's 📖 Guide button), `/api/stop-comfy`, a `--log` default, and a connection-robustness fix in the proxy (499 on client abort).
 - `run.sh`: default ComfyUI venv path (`repo/venv/bin/python`).
 - `.gitignore`: ignores `*.log`.
@@ -28,9 +28,5 @@ Status: **draft pre-release** — not published. Covers the uncommitted working 
 - `runs.jsonl` may contain smoke-probe records with no schema fields; skip them when aggregating.
 - No LICENSE file — vendored guides are MIT © MiniMax; the rest of the repo is unlicensed.
 - Persisted gallery keeps the last 200 runs with graphs stripped; the full API graph lives only in the `runs.jsonl` record.
-
-### Not in this release
-
-- Publishing: this is a draft. Publish only after the tag points at a commit containing this work.
 
 [v0.2.0-beta.1]: https://github.com/PyaesoneP/H3-Studio/releases/tag/v0.2.0-beta.1
