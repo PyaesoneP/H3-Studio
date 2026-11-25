@@ -1,4 +1,4 @@
-/* H3 Studio — browser side. Builds ComfyUI API graphs for MiniMax H3 (Image Studio nodes for stills,
+/* H3 Studio: browser side. Builds ComfyUI API graphs for MiniMax H3 (Image Studio nodes for stills,
    native MiniMax H3 nodes for video), queues them through the /comfy proxy and tracks progress over the
    websocket. Form state, uploaded inputs and results persist in localStorage. */
 'use strict';
@@ -221,7 +221,7 @@ const BLD_REL_HINT = {
 };
 const BLD_REL_TIP = {
   full: 'Nothing about it changes.',
-  partial: 'Part of it stays — describe what changes in Detail.',
+  partial: 'Part of it stays. Describe what changes in Detail.',
   transfer: 'Borrows one exact property (colour, material) from this reference.',
   weak: 'Loose inspiration; the target may adapt freely.',
 };
@@ -333,7 +333,7 @@ function renderBuilder() {
     renderBChips('bRatio', BLD_RATIOS.map(r => [r, r]), b.ratio || '',
       x => { b.ratio = b.ratio === x ? '' : x; saveBld(); renderBuilder(); });
     const t = BLD_TYPES.find(x => x[0] === b.type) || BLD_TYPES[0];
-    $('#bOpenPreview').textContent = t[2] ? `Opening line: “${t[2]}…”` : 'Free text — the Subject field is used exactly as written.';
+    $('#bOpenPreview').textContent = t[2] ? `Opening line: “${t[2]}…”` : 'Free text. The Subject field is used exactly as written.';
   } else renderBSubs(b);
   renderBTexts(b);
   renderBExample();
@@ -358,7 +358,7 @@ function renderBSubs(b) {
   const host = $('#bSubjects'), pics = S.lists[S.mode] || [];
   while (b.subs.length < pics.length) b.subs.push({ what: '', rel: 'full', detail: '' });
   host.innerHTML = '';
-  if (!pics.length) { host.innerHTML = '<p class="muted small">Add Pictures above — each slot gets a definition sentence once you name what it contributes.</p>'; return; }
+  if (!pics.length) { host.innerHTML = '<p class="muted small">Add Pictures above. Each slot gets a definition sentence once you name what it contributes.</p>'; return; }
   pics.forEach((pic, i) => {
     const s = b.subs[i] || (b.subs[i] = { what: '', rel: 'full', detail: '' });
     const card = document.createElement('div'); card.className = 'bcard';
@@ -408,7 +408,7 @@ function renderBTexts(b) {
 function updateBldOut() {
   if (!bldVariant()) return;
   const b = bldState(), txt = assemblePrompt();
-  $('#bOut').textContent = txt || 'Fill the steps — the assembled paragraph appears here, in the official order.';
+  $('#bOut').textContent = txt || 'Fill the steps. The assembled paragraph appears here, in the official order.';
   $('#bOut').classList.toggle('muted', !txt);
   const est = Math.round(txt.length / 4);
   $('#bCount').textContent = txt ? `≈ ${est} of 4096 tokens` : '';
@@ -448,7 +448,7 @@ function renderBTokChips() {
        ...(bldState().subs || []).map((s, i) => `<Subject ${i + 1}>`), '<Video 1>', '<Audio 1>']
     : [];
   row.classList.toggle('hidden', !tags.length);
-  if (row.dataset.tags === tags.join(',')) return;   // no rebuild while typing — keeps focus safe
+  if (row.dataset.tags === tags.join(',')) return;   // no rebuild while typing: keeps focus safe
   row.dataset.tags = tags.join(',');
   row.innerHTML = '';
   tags.forEach(t => {
@@ -482,7 +482,7 @@ function syncBldField(el) {
 }
 function applyBld(append) {
   const txt = assemblePrompt();
-  if (!txt.trim()) return showErr('The builder has nothing to assemble yet — fill at least step 2 (Subject) or step 1 (References).');
+  if (!txt.trim()) return showErr('The builder has nothing to assemble yet: fill at least step 2 (Subject) or step 1 (References).');
   const ta = $('#prompt');
   ta.value = append && ta.value.trim() ? `${ta.value.trimEnd()} ${txt}` : txt;
   S.promptSource = 'builder';
@@ -503,7 +503,7 @@ function bldExample(idx) {
   if (!ex) return;
   S.bld[S.mode] = Object.assign(bldBlank(bldVariant()), JSON.parse(JSON.stringify(ex)));
   saveBld(); renderBuilder();
-  toast('info', `Example loaded: ${ex.label || 'Example'}`, 'Nothing was overwritten — press Replace prompt to use it.');
+  toast('info', `Example loaded: ${ex.label || 'Example'}`, 'Nothing was overwritten. Press Replace prompt to use it.');
 }
 async function bldGuide() {
   const kind = bldVariant() === 't2i' ? 't2i' : 'edit';
@@ -941,7 +941,7 @@ function showErr(msg) {
 function formatNodeErrors(body, graph) {
   const lines = [body.error?.message || body.error || 'Prompt rejected'];
   for (const [id, ne] of Object.entries(body.node_errors || {}))
-    for (const er of ne.errors || []) lines.push(`• ${graph?.[id]?.class_type || ne.class_type || id}: ${er.message}${er.details ? ' — ' + er.details : ''}`);
+    for (const er of ne.errors || []) lines.push(`• ${graph?.[id]?.class_type || ne.class_type || id}: ${er.message}${er.details ? ', ' + er.details : ''}`);
   return lines.join('\n');
 }
 function summary() {
@@ -1337,7 +1337,7 @@ function init() {
     const txt = assemblePrompt();
     if (!txt.trim()) return toast('warn', 'Nothing to copy', 'Fill at least one step first.');
     try { await navigator.clipboard.writeText(txt); toast('ok', 'Prompt copied', `${txt.length} characters`); }
-    catch { showErr('Clipboard blocked by the browser — select the text in the preview and copy manually.'); }
+    catch { showErr('Clipboard blocked by the browser. Select the text in the preview and copy manually.'); }
   };
   $('#bClear').onclick = async () => {
     if (assemblePrompt().trim()
