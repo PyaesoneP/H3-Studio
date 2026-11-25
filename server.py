@@ -4,13 +4,37 @@ edit, video). Serves static/ and proxies ComfyUI (HTTP + websocket) under /comfy
 same-origin. Every queued run is appended to runs.jsonl (record for the AI-use declaration).
 Usage  ./run.sh [--port 8190] [--comfy http://127.0.0.1:8188] [--comfy-dir ~/comfyui] [--log PATH]
 """
-import argparse, asyncio, json, pathlib, subprocess, time
+import argparse, asyncio, json, os, pathlib, signal, subprocess, time
+from urllib.parse import urlparse
 import aiohttp
 from aiohttp import web
 
 HERE = pathlib.Path(__file__).resolve().parent
 DROP = {"host", "origin", "referer", "content-length", "transfer-encoding", "connection", "upgrade",
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-encoding"}
+
+
+def comfy_port(comfy):
+    return urlparse(comfy).port or 8188
+
+
+def comfy_pids(port):
+    """PIDs listening on ComfyUI's port. lsof is limited to the local ComfyUI port, and we never
+    return our own process, so this can't accidentally stop H3 Studio itself."""
+    try:
+        out = subprocess.check_output(["lsof", "-ti", f"tcp:{port}"], text=True,
+                                      stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    pids = []
+    for tok in out.split():
+        try:
+            pid = int(tok)
+        except ValueError:
+            continue
+        if pid not in (os.getpid(), os.getppid()):
+            pids.append(pid)
+    return pids
 
 
 def make_app(comfy, comfy_dir, log_path):
@@ -79,21 +103,47 @@ def make_app(comfy, comfy_dir, log_path):
         return web.json_response({"ok": True, "log": str(log_path)})
 
     async def start_comfy(_):
-        if not (comfy_dir / "launch.sh").exists():
-            return web.json_response({"ok": False, "error": f"{comfy_dir}/launch.sh not found"}, status=404)
-        out = (comfy_dir / "comfyui.log").open("ab")
-        subprocess.Popen(["bash", "launch.sh"], cwd=comfy_dir, stdout=out, stderr=subprocess.STDOUT,
-                         start_new_session=True)
-        return web.json_response({"ok": True, "log": str(comfy_dir / "comfyui.log")})
+        log = comfy_dir / "comfyui.log"
+        out = log.open("ab")
+        if (comfy_dir / "launch.sh").exists():
+            cmd, cwd = ["bash", "launch.sh"], comfy_dir
+        else:  # no launch.sh in this install: launch the repo's venv directly
+            repo = comfy_dir / "repo"
+            py = repo / "venv/bin/python"
+            if not py.exists():
+                out.close()
+                return web.json_response({"ok": False, "error": f"Neither {comfy_dir}/launch.sh nor {py} found"}, status=404)
+            cmd = [str(py), "main.py", "--disable-pinned-memory", "--fp16-intermediates",
+                   "--fast-disk", "--port", str(comfy_port(comfy))]
+            cwd = repo
+        subprocess.Popen(cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+        return web.json_response({"ok": True, "log": str(log)})
+
+    async def stop_comfy(_):
+        pids = comfy_pids(comfy_port(comfy))
+        if not pids:
+            return web.json_response({"ok": False, "error": "No ComfyUI process found on the configured port"}, status=404)
+        stopped = []
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                stopped.append(pid)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                return web.json_response({"ok": False, "error": f"Not allowed to stop PID {pid}"}, status=403)
+        return web.json_response({"ok": True, "stopped": stopped})
 
     app.on_startup.append(startup)
     app.on_cleanup.append(cleanup)
     app.router.add_get("/", index)
     app.router.add_static("/static", HERE / "static")
+    app.router.add_static("/docs", HERE / "docs")  # official prompt guides shown by the builder's 📖 Guide button
     app.router.add_get("/comfy/ws", ws_proxy)
     app.router.add_route("*", "/comfy/{tail:.*}", http_proxy)
     app.router.add_post("/api/log", log_run)
     app.router.add_post("/api/start-comfy", start_comfy)
+    app.router.add_post("/api/stop-comfy", stop_comfy)
     return app
 
 
