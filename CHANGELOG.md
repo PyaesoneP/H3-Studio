@@ -16,6 +16,7 @@ Status: **draft pre-release** — not published yet. The `v0.2.0-beta.1` tag poi
 
 ### Changed
 
+- **Apache License 2.0** for the repository (the vendored guides remain MIT © MiniMax).
 - README rewritten: adds a system-requirements section (POSIX + lsof, ComfyUI + MiniMax H3 nodes or the official checkpoint path, Python 3.12+ with `aiohttp`, a modern browser) and points at `docs/`.
 - `server.py`: `/docs` static serving (the vendored guides shown by the builder's 📖 Guide button), `/api/stop-comfy`, a `--log` default, and a connection-robustness fix in the proxy (499 on client abort).
 - `run.sh`: default ComfyUI venv path (`repo/venv/bin/python`).
@@ -26,7 +27,7 @@ Status: **draft pre-release** — not published yet. The `v0.2.0-beta.1` tag poi
 
 - The video path has no logged runs yet — gallery/graphs exercised by the image tabs only.
 - `runs.jsonl` may contain smoke-probe records with no schema fields; skip them when aggregating.
-- No LICENSE file — vendored guides are MIT © MiniMax; the rest of the repo is unlicensed.
+- Vendored guides remain MIT © MiniMax (the rest of the repo is Apache-2.0).
 - Persisted gallery keeps the last 200 runs with graphs stripped; the full API graph lives only in the `runs.jsonl` record.
 
 [v0.2.0-beta.1]: https://github.com/PyaesoneP/H3-Studio/releases/tag/v0.2.0-beta.1

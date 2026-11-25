@@ -8,7 +8,7 @@
   <a href="https://github.com/PyaesoneP/H3-Studio/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/status-v0.2.0--beta.1--draft-orange" alt="Status: v0.2.0-beta.1 draft" /></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+" />
   <img src="https://img.shields.io/badge/platform-Linux%20%C2%B7%20macOS-lightgrey" alt="Platform: Linux / macOS" />
-  <img src="https://img.shields.io/badge/license-not%20licensed-lightgrey" alt="License: not licensed" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-lightgrey" alt="License: Apache 2.0" /></a>
   <a href="https://github.com/PyaesoneP/H3-Studio/stargazers"><img src="https://img.shields.io/github/stars/PyaesoneP/H3-Studio?style=flat-square" alt="Stars" /></a>
 </p>
 
@@ -71,4 +71,4 @@ The image modes follow the official MiniMax H3-Image checkpoint (`h3_image` in t
 
 ## Status & notes
 
-Pre-release (v0.2.0-beta.1, draft). The video path has not been exercised by any logged run yet. `runs.jsonl` is git-ignored on purpose — it contains prompts, inputs and outputs. There is no LICENSE file yet; vendored guides are MIT © MiniMax, the rest of the repo is unlicensed.
+Pre-release (v0.2.0-beta.1, draft). The video path has not been exercised by any logged run yet. `runs.jsonl` is git-ignored on purpose — it contains prompts, inputs and outputs. The repository is open-source under the [Apache License 2.0](LICENSE), except the vendored official guides in `docs/prompt-guide-t2i.md` and `docs/prompt-guide-edit.md`, which remain MIT © MiniMax.
