@@ -138,7 +138,7 @@ def make_app(comfy, comfy_dir, log_path):
     app.on_cleanup.append(cleanup)
     app.router.add_get("/", index)
     app.router.add_static("/static", HERE / "static")
-    app.router.add_static("/docs", HERE / "docs")  # official prompt guides shown by the builder's 📖 Guide button
+    app.router.add_static("/docs", HERE / "docs")  # official prompt guides shown by the builder's Guide button
     app.router.add_get("/comfy/ws", ws_proxy)
     app.router.add_route("*", "/comfy/{tail:.*}", http_proxy)
     app.router.add_post("/api/log", log_run)
