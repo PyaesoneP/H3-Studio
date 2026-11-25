@@ -39,14 +39,9 @@
 </defs></svg>
 
 <header class="top">
-  <div class="brand"><img class="mark mark-light" src="/static/mark-light.svg" alt="SUTDio logo" height="22" width="22"><img class="mark mark-dark" src="/static/mark-dark.svg" alt="SUTDio logo" height="22" width="22"> SUTDio <small>MiniMax H3 · ComfyUI</small></div>
-  <nav class="tabs" id="tabs" role="tablist" aria-label="Generation modes">
-    <button data-mode="t2i" class="on" role="tab" aria-selected="true" tabindex="0"><svg class="i tab-ic"><use href="#i-image"/></svg>Text → Image</button>
-    <button data-mode="i2i" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-send"/></svg>Image → Image</button>
-    <button data-mode="multi" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-layers"/></svg>Multi-image → Image</button>
-    <button data-mode="video" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-film"/></svg>Video</button>
-  </nav>
-  <div class="status">
+  <div class="top-bar">
+    <div class="brand"><img class="lockup lockup-light" src="/static/lockup-light.svg" alt="SUTDio logo" height="30" width="107"><img class="lockup lockup-dark" src="/static/lockup-dark.svg" alt="SUTDio logo" height="30" width="107"><small>MiniMax H3 · ComfyUI</small></div>
+    <div class="status">
     <span id="conn" class="dot off" title="ComfyUI connection"></span>
     <span id="connText">offline</span>
     <span id="vram" class="muted"></span>
@@ -55,6 +50,13 @@
     <button id="freeMem" class="ghost" title="Unload models and free VRAM">Free VRAM</button>
     <button id="themeBtn" class="icon-btn" title="Theme: system" aria-label="Switch theme"><svg class="i"><use href="#i-monitor"/></svg></button>
   </div>
+  </div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Generation modes">
+    <button data-mode="t2i" class="on" role="tab" aria-selected="true" tabindex="0"><svg class="i tab-ic"><use href="#i-image"/></svg>Text → Image</button>
+    <button data-mode="i2i" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-send"/></svg>Image → Image</button>
+    <button data-mode="multi" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-layers"/></svg>Multi-image → Image</button>
+    <button data-mode="video" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-film"/></svg>Video</button>
+  </nav>
 </header>
 
 <main>
