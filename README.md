@@ -1,8 +1,18 @@
+<p align="center">
+  <a href="https://github.com/PyaesoneP/H3-Studio"><img src="assets/logo.svg" width="112" alt="H3 Studio logo" /></a>
+</p>
+
 # H3 Studio
 
-Local, browser-based frontend for [MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3-Image) in ComfyUI: text → image, image → image, multi-reference image edit, and video generation, in one instrument-panel-style UI with a results gallery.
+<p align="center">
+  <a href="https://github.com/PyaesoneP/H3-Studio/blob/main/CHANGELOG.md"><img src="https://img.shields.io/badge/status-v0.2.0--beta.1--draft-orange" alt="Status: v0.2.0-beta.1 draft" /></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+" />
+  <img src="https://img.shields.io/badge/platform-Linux%20%C2%B7%20macOS-lightgrey" alt="Platform: Linux / macOS" />
+  <img src="https://img.shields.io/badge/license-not%20licensed-lightgrey" alt="License: not licensed" />
+  <a href="https://github.com/PyaesoneP/H3-Studio/stargazers"><img src="https://img.shields.io/github/stars/PyaesoneP/H3-Studio?style=flat-square" alt="Stars" /></a>
+</p>
 
-![pre-release](https://img.shields.io/badge/status-v0.2.0--beta.1%20draft-orange)
+Local, browser-based frontend for [MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3-Image) in ComfyUI: text → image, image → image, multi-reference image edit, and video generation, in one instrument-panel-style UI with a results gallery.
 
 ## System requirements
 
