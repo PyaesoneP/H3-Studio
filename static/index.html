@@ -7,20 +7,53 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<svg class="sprite" aria-hidden="true"><defs>
+<symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5L13 4.5"/></symbol>
+<symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.5v4M8 5.2v.01"/></symbol>
+<symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2L1.5 13.5h13L8 2z"/><path d="M8 6.5v3.5M8 12v.01"/></symbol>
+<symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3"/></symbol>
+<symbol id="i-moon" viewBox="0 0 16 16"><path d="M13.4 10.1A6 6 0 1 1 5.9 2.6 4.8 4.8 0 0 0 13.4 10.1z"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M6 13.5h4M8 11v2.5"/></symbol>
+<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4"/><path d="M10 10l4 4"/></symbol>
+<symbol id="i-dl" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7L8 10.5 11.5 7M2.5 13.5h11"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16"><path d="M2 8h11M9 4l4 4-4 4"/></symbol>
+<symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3a1 1 0 011-1h1a1 1 0 011 1v1.5M4.5 4.5l.6 9h5.8l.6-9M6.5 7.5v3.5M9.5 7.5v3.5"/></symbol>
+<symbol id="i-image" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="5.5" cy="6.5" r="1.2"/><path d="M2.5 11.5l3.5-3 3 2.5 2.5-2 2 2"/></symbol>
+<symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 3v10M11 3v10M2 6.5h3M2 9.5h3M11 6.5h3M11 9.5h3"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16"><path d="M8 2L2 5.5 8 9l6-3.5L8 2zM2 9.5l6 3.5 6-3.5"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.8"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1"/><path d="M6.5 2v2.5M9.5 2v2.5M6.5 11.5V14M9.5 11.5V14M2 6.5h2.5M2 9.5h2.5M11.5 6.5H14M11.5 9.5H14"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16"><path d="M2 4.5h7M13.5 4.5H14M2 8h2M8.5 8H14M2 11.5h7M13.5 11.5H14"/><circle cx="11.2" cy="4.5" r="1.6"/><circle cx="6" cy="8" r="1.6"/><circle cx="11.2" cy="11.5" r="1.6"/></symbol>
+<symbol id="i-out" viewBox="0 0 16 16"><path d="M8 10.5V2.5M4.5 6L8 2.5 11.5 6M2.5 13.5h11"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></symbol>
+<symbol id="i-arrow-l" viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5"/></symbol>
+<symbol id="i-arrow-r" viewBox="0 0 16 16"><path d="M6 3.5L10.5 8 6 12.5"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 16 16"><path d="M2.5 9.5L4.5 3.5h7l2 6v4h-11v-4zM2.5 9.5h3.6l1 2h1.8l1-2h3.6"/></symbol>
+<symbol id="i-play" viewBox="0 0 16 16"><path d="M5.5 3.5l7 4.5-7 4.5v-9z"/></symbol>
+<symbol id="i-enter" viewBox="0 0 16 16"><path d="M13.5 3v4.5a2 2 0 0 1-2 2H4.5M7.5 7L4 9.5l3.5 2.5"/></symbol>
+<symbol id="i-blocks" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="5.5" height="5.5" rx="1"/><rect x="8" y="8" width="5.5" height="5.5" rx="1"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 1.8v2.8h-2.8"/></symbol>
+<symbol id="i-dice" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M5.8 5.8v.01M10.2 5.8v.01M8 8v.01M5.8 10.2v.01M10.2 10.2v.01"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 2.5v11M2.5 8h11"/></symbol>
+</defs></svg>
+
 <header class="top">
   <div class="brand"><span class="logo">H3</span> Studio <small>MiniMax H3 · ComfyUI</small></div>
-  <nav class="tabs" id="tabs">
-    <button data-mode="t2i" class="on">Text → Image</button>
-    <button data-mode="i2i">Image → Image</button>
-    <button data-mode="multi">Multi-image → Image</button>
-    <button data-mode="video">Video</button>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Generation modes">
+    <button data-mode="t2i" class="on" role="tab" aria-selected="true" tabindex="0"><svg class="i tab-ic"><use href="#i-image"/></svg>Text → Image</button>
+    <button data-mode="i2i" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-send"/></svg>Image → Image</button>
+    <button data-mode="multi" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-layers"/></svg>Multi-image → Image</button>
+    <button data-mode="video" role="tab" aria-selected="false" tabindex="-1"><svg class="i tab-ic"><use href="#i-film"/></svg>Video</button>
   </nav>
   <div class="status">
     <span id="conn" class="dot off" title="ComfyUI connection"></span>
     <span id="connText">offline</span>
     <span id="vram" class="muted"></span>
     <button id="startComfy" class="ghost hidden">Start ComfyUI</button>
+    <button id="stopComfy" class="ghost hidden" title="Stop the ComfyUI server (running jobs will be cancelled)">Stop ComfyUI</button>
     <button id="freeMem" class="ghost" title="Unload models and free VRAM">Free VRAM</button>
+    <button id="themeBtn" class="icon-btn" title="Theme: system" aria-label="Switch theme"><svg class="i"><use href="#i-monitor"/></svg></button>
   </div>
 </header>
 
@@ -75,6 +108,86 @@
       <span class="muted small" id="promptCount"></span>
     </div>
   </section>
+
+  <!-- ───── Prompt builder ───── -->
+  <details class="sec builder" id="builder" data-show="t2i i2i multi">
+    <summary><span>Prompt builder</span><small class="muted" id="bldSummary">step by step · official H3-Image guide</small></summary>
+    <div id="bldBody" class="bld">
+
+      <div class="bldform">
+        <!-- Text → Image -->
+        <section class="bstep" data-bld="t2i" data-step="1">
+          <h4><span class="num">1</span> Image type <small class="muted">sets the opening line</small></h4>
+          <div class="presets wide" id="bType"></div>
+          <p class="muted small" id="bOpenPreview"></p>
+        </section>
+        <section class="bstep" data-bld="t2i" data-step="2">
+          <h4><span class="num">2</span> Subject <small class="muted">what the image shows — one frozen moment</small></h4>
+          <textarea id="b-subject" rows="2" placeholder="a woman potter seated at a pottery wheel in a sunlit workshop, her left hand supporting the bowl's outer wall…"></textarea>
+        </section>
+        <section class="bstep" data-bld="t2i" data-step="3">
+          <h4><span class="num">3</span> Layout <small class="muted">where things are — left/right, foreground, grid rows × columns</small></h4>
+          <textarea id="b-layout" rows="2" placeholder="the title sits at the upper left; the chart fills the lower two-thirds…"></textarea>
+        </section>
+        <section class="bstep" data-bld="t2i" data-step="4">
+          <h4><span class="num">4</span> Text on the image <small class="muted">every visible word, quoted with its placement</small></h4>
+          <label class="check mb8"><input type="checkbox" id="b-noText"> No text in the image</label>
+          <div id="bTextsT2i"></div>
+          <button type="button" class="ghost" data-addtext>+ Text element</button>
+        </section>
+        <section class="bstep" data-bld="t2i" data-step="5">
+          <h4><span class="num">5</span> Look <small class="muted">light, materials, colour — visible attributes only</small></h4>
+          <textarea id="b-light" rows="2" placeholder="soft side-window sunlight catching moisture on the clay; warm earth tones…"></textarea>
+        </section>
+        <section class="bstep opt" data-bld="t2i" data-step="6">
+          <h4><span class="num">6</span> Exclusions &amp; canvas <small class="muted">optional</small></h4>
+          <label>Nothing else should appear <input id="b-exclude" type="text" placeholder="people, brand names, watermarks"></label>
+          <p class="muted small mt8">Canvas ratio</p>
+          <div class="presets wide" id="bRatio" title="Click the active ratio again to clear it"></div>
+          <label class="check"><input type="checkbox" id="b-syncRatio" checked> Set Canvas ▸ Aspect ratio when replacing the prompt</label>
+        </section>
+
+        <!-- Image → Image / Multi-image -->
+        <section class="bstep" data-bld="edit" data-step="1">
+          <h4><span class="num">1</span> References <small class="muted">what each Picture contributes and how it is used</small></h4>
+          <p class="muted small">For a person whose clothes, pose or expression change but whose face must stay: choose <b>partially preserved</b> and name the face in Detail.</p>
+          <div id="bSubjects"></div>
+        </section>
+        <section class="bstep" data-bld="edit" data-step="2">
+          <h4><span class="num">2</span> Target <small class="muted">the finished image in one line — “The target image …” is prepended</small></h4>
+          <textarea id="b-target" rows="2" placeholder="shows &lt;Subject 1&gt; with a blue finish"></textarea>
+        </section>
+        <section class="bstep" data-bld="edit" data-step="3">
+          <h4><span class="num">3</span> Changes &amp; new content <small class="muted">the final state, not commands</small></h4>
+          <textarea id="b-changes" rows="2" placeholder="the blue finish follows the existing surface shading and highlights of &lt;Subject 1&gt;, with the rest of the source image unchanged"></textarea>
+        </section>
+        <section class="bstep opt" data-bld="edit" data-step="4">
+          <h4><span class="num">4</span> Text on the image <small class="muted">optional</small></h4>
+          <div id="bTextsEdit"></div>
+          <button type="button" class="ghost" data-addtext>+ Text element</button>
+        </section>
+      </div>
+
+      <aside class="bldside">
+        <div class="bldout">
+          <div class="row between"><b>Assembled prompt</b><span class="muted small" id="bCount"></span></div>
+          <div class="budget" id="bBudget" title="Token budget (approximate)"><i id="bBudgetFill"></i></div>
+          <div class="tokrow hidden" id="bTokRow" title="Click to insert a reference tag at the cursor of the last focused field"></div>
+          <div id="bOut"></div>
+          <div class="row">
+            <button type="button" class="accentbtn" id="bUse" title="Replace everything in the prompt box (Ctrl+Enter while typing here)">Replace prompt</button>
+            <button type="button" class="ghost" id="bAppend" title="Append after the current prompt">Add to prompt</button>
+            <button type="button" class="ghost" id="bCopy">Copy</button>
+          </div>
+          <div class="row">
+            <select id="bExample" class="bex" title="Load an official-style example into the steps"></select>
+            <button type="button" class="ghost" id="bClear">Clear</button>
+            <button type="button" class="ghost" id="bGuide" title="Official writing guide"><svg class="i"><use href="#i-info"/></svg> Guide</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </details>
 
   <!-- ───── Keyframe guides (video) ───── -->
   <section data-show="video">
@@ -132,62 +245,68 @@
   </section>
 
   <!-- ───── Sampling ───── -->
-  <section>
-    <h3>Sampling</h3>
-    <div class="presets wide" id="presetBtns"></div>
-    <div class="grid3">
-      <label>Steps <input type="number" id="steps" data-persist value="50" min="1" max="200"></label>
-      <label>Sampler <select id="sampler" data-persist></select></label>
-      <label>Scheduler <select id="scheduler" data-persist></select></label>
+  <details class="sec" data-band="sampling">
+    <summary><svg class="i chev"><use href="#i-chev"/></svg><span>Sampling</span><span class="sum" id="sum-sampling"></span></summary>
+    <div class="inner">
+      <div class="presets wide" id="presetBtns"></div>
+      <div class="grid3">
+        <label>Steps <input type="number" id="steps" data-persist value="50" min="1" max="200"></label>
+        <label>Sampler <select id="sampler" data-persist></select></label>
+        <label>Scheduler <select id="scheduler" data-persist></select></label>
+      </div>
+      <div class="grid3">
+        <label>Seed <span class="inline"><input type="number" id="seed" data-persist value="42" min="0"><button type="button" class="ghost icon-only" id="dice" title="Random seed" aria-label="Randomize seed"><svg class="i"><use href="#i-dice"/></svg></button></span></label>
+        <label>After each run <select id="seedMode" data-persist><option value="fixed">keep seed</option><option value="increment">increment</option><option value="random">randomize</option></select></label>
+        <label>Batch count <input type="number" id="batch" data-persist value="1" min="1" max="64"></label>
+      </div>
+      <div data-show="video" class="grid3">
+        <label class="check"><input type="checkbox" id="shiftOn" data-persist> Override sigma shift</label>
+        <label>Video shift <input type="number" id="shiftV" data-persist value="12" min="0.01" max="100" step="0.01"></label>
+        <label>Audio shift <input type="number" id="shiftA" data-persist value="3" min="0.01" max="100" step="0.01"></label>
+      </div>
     </div>
-    <div class="grid3">
-      <label>Seed <span class="inline"><input type="number" id="seed" data-persist value="42" min="0"><button type="button" class="ghost" id="dice" title="Random seed">Random</button></span></label>
-      <label>After each run <select id="seedMode" data-persist><option value="fixed">keep seed</option><option value="increment">increment</option><option value="random">randomize</option></select></label>
-      <label>Batch count <input type="number" id="batch" data-persist value="1" min="1" max="64"></label>
-    </div>
-    <div data-show="video" class="grid3">
-      <label class="check"><input type="checkbox" id="shiftOn" data-persist> Override sigma shift</label>
-      <label>Video shift <input type="number" id="shiftV" data-persist value="12" min="0.01" max="100" step="0.01"></label>
-      <label>Audio shift <input type="number" id="shiftA" data-persist value="3" min="0.01" max="100" step="0.01"></label>
-    </div>
-  </section>
+  </details>
 
   <!-- ───── Models ───── -->
-  <details class="sec" open>
-    <summary>Models &amp; LoRAs</summary>
-    <div class="grid3">
-      <label>Diffusion model <select id="model" data-persist></select></label>
-      <label>Text encoder <select id="te" data-persist></select></label>
-      <label>Video VAE <select id="vae" data-persist></select></label>
+  <details class="sec" data-band="models">
+    <summary><svg class="i chev"><use href="#i-layers"/></svg><span>Models &amp; LoRAs</span><span class="sum" id="sum-models"></span></summary>
+    <div class="inner">
+      <div class="grid3">
+        <label>Diffusion model <select id="model" data-persist></select></label>
+        <label>Text encoder <select id="te" data-persist></select></label>
+        <label>Video VAE <select id="vae" data-persist></select></label>
+      </div>
+      <div class="grid3" data-show="video">
+        <label>Audio VAE <select id="avae" data-persist></select></label>
+        <label>Weight dtype <select id="dtype" data-persist></select></label>
+        <div></div>
+      </div>
+      <h4>LoRA stack <small class="muted">applied in order; strength 0 or None is skipped</small></h4>
+      <div id="loras"></div>
+      <button type="button" class="ghost" id="addLora">+ LoRA</button>
     </div>
-    <div class="grid3" data-show="video">
-      <label>Audio VAE <select id="avae" data-persist></select></label>
-      <label>Weight dtype <select id="dtype" data-persist></select></label>
-      <div></div>
-    </div>
-    <h4>LoRA stack <small class="muted">applied in order; strength 0 or None is skipped</small></h4>
-    <div id="loras"></div>
-    <button type="button" class="ghost" id="addLora">+ LoRA</button>
   </details>
 
   <!-- ───── Output ───── -->
-  <details class="sec">
-    <summary>Output</summary>
-    <div class="grid3">
-      <label>Filename prefix <input type="text" id="prefix" data-persist value="h3studio/img"></label>
-      <label data-show="video">Container <select id="vFormat" data-persist><option>auto</option><option>mp4</option><option>mkv</option><option>webm</option></select></label>
-      <label data-show="video">Codec <select id="vCodec" data-persist><option>auto</option><option>h264</option><option>av1</option></select></label>
+  <details class="sec" data-band="output">
+    <summary><svg class="i chev"><use href="#i-out"/></svg><span>Output</span><span class="sum" id="sum-output"></span></summary>
+    <div class="inner">
+      <div class="grid3">
+        <label>Filename prefix <input type="text" id="prefix" data-persist value="h3studio/img"></label>
+        <label data-show="video">Container <select id="vFormat" data-persist><option>auto</option><option>mp4</option><option>mkv</option><option>webm</option></select></label>
+        <label data-show="video">Codec <select id="vCodec" data-persist><option>auto</option><option>h264</option><option>av1</option></select></label>
+      </div>
+      <div class="grid3" data-show="video">
+        <label>H.264 CRF <small class="muted">(blank = auto)</small><input type="number" id="vCrf" data-persist min="0" max="51" step="1" placeholder="auto"></label>
+        <label>Bit depth <select id="vBits" data-persist><option value="auto">auto</option><option value="8">8</option><option value="10">10</option></select></label>
+        <label>Colour space <select id="vColor" data-persist><option>sRGB</option><option>HDR</option><option>HDR PQ</option></select></label>
+      </div>
+      <label class="check" data-show="video"><input type="checkbox" id="vAudio" data-persist checked> Include generated audio track</label>
     </div>
-    <div class="grid3" data-show="video">
-      <label>H.264 CRF <small class="muted">(blank = auto)</small><input type="number" id="vCrf" data-persist min="0" max="51" step="1" placeholder="auto"></label>
-      <label>Bit depth <select id="vBits" data-persist><option value="auto">auto</option><option value="8">8</option><option value="10">10</option></select></label>
-      <label>Colour space <select id="vColor" data-persist><option>sRGB</option><option>HDR</option><option>HDR PQ</option></select></label>
-    </div>
-    <label class="check" data-show="video"><input type="checkbox" id="vAudio" data-persist checked> Include generated audio track</label>
   </details>
 
   <div class="actions">
-    <button type="button" id="go" class="primary">Generate <kbd>Ctrl ↵</kbd></button>
+    <button type="button" id="go" class="primary">Generate <kbd>Ctrl</kbd><kbd><svg class="i"><use href="#i-enter"/></svg></kbd></button>
     <button type="button" id="showApi" class="ghost">API JSON</button>
     <button type="button" id="interrupt" class="ghost">Interrupt</button>
     <button type="button" id="clearQueue" class="ghost">Clear queue</button>
@@ -197,21 +316,43 @@
 
 <aside class="results">
   <div class="runbar">
-    <div class="row between"><b id="runTitle">Idle</b><span class="muted small" id="queueInfo"></span></div>
+    <b id="runTitle">Idle</b>
+    <span id="runNode"></span>
+    <span id="runPct"></span>
+    <span id="runTime"></span>
+    <span id="runEta"></span>
+    <span id="queueInfo"></span>
     <div class="bar"><div id="barFill"></div></div>
-    <div class="muted small" id="runNode"></div>
   </div>
+
+  <div class="gfilter" role="group" aria-label="Filter results">
+    <button type="button" class="fbtn on" data-filter="all">All <span class="fcount" id="fc-all">0</span></button>
+    <button type="button" class="fbtn" data-filter="images"><svg class="i"><use href="#i-image"/></svg>Images <span class="fcount" id="fc-images">0</span></button>
+    <button type="button" class="fbtn" data-filter="videos"><svg class="i"><use href="#i-film"/></svg>Videos <span class="fcount" id="fc-videos">0</span></button>
+    <button type="button" class="fbtn" data-filter="failed"><svg class="i"><use href="#i-warn"/></svg>Failed <span class="fcount" id="fc-failed">0</span></button>
+    <label class="gsearch"><svg class="i"><use href="#i-search"/></svg><input id="gSearch" type="search" placeholder="seed, prompt, run id…" aria-label="Search runs"></label>
+  </div>
+  <div id="bulkBar" class="hidden">
+    <b id="bulkN">0</b> selected
+    <span class="spacer"></span>
+    <button type="button" class="bulk-btn" id="bulkDl"><svg class="i"><use href="#i-dl"/></svg>Download</button>
+    <button type="button" class="bulk-btn" id="bulkEdit"><svg class="i"><use href="#i-send"/></svg>Send to Edit</button>
+    <button type="button" class="bulk-btn" id="bulkDel"><svg class="i"><use href="#i-trash"/></svg>Remove</button>
+    <button type="button" class="bulk-btn" id="bulkClear"><svg class="i"><use href="#i-x"/></svg>Clear</button>
+  </div>
+
   <div class="row between"><h3>Results</h3><button class="ghost small" id="clearGallery">Clear list</button></div>
-  <div id="gallery"></div>
+  <div id="gallery" class="gallery"></div>
 </aside>
 </main>
 
-<div id="modal" class="modal hidden">
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Details">
   <div class="sheet">
-    <button class="close" id="modalClose">✕</button>
+    <button class="close icon-btn" id="modalClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
     <div id="modalBody"></div>
   </div>
 </div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
 <input type="file" id="filePick" class="hidden">
 <script src="/static/app.js"></script>
 </body>

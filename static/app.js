@@ -5,7 +5,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const CID = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
-const LS = 'h3studio.';
+const LS = 'h3studio.';  // localStorage prefix
 const MB = 1024 * 1024;
 const IMG_MODES = ['t2i', 'i2i', 'multi'];
 const DEFAULTS = {
@@ -19,9 +19,10 @@ const officialImage = () => /h3_image/i.test(val('model'));
 
 const S = {
   mode: 't2i', info: {}, online: false, runs: [], byId: {}, ws: null, active: null,
-  loras: [],
+  loras: [], bld: null, promptSource: 'raw',
   lists: { i2i: [], multi: [], first: [], last: [], refImg: [], refVid: [], refAud: [] },
   guides: [],
+  sel: new Set(), gFilter: 'all', gQ: '', gShown: [],
 };
 
 /* ───────── storage ───────── */
@@ -43,6 +44,9 @@ const loaderName = a => (a.type === 'output' || a.type === 'temp')
 const kindOf = name => /\.(mp4|webm|mkv|mov|avi|gif)$/i.test(name) ? 'video'
   : /\.(wav|mp3|flac|ogg|m4a|aac|opus)$/i.test(name) ? 'audio' : 'image';
 const randSeed = () => Math.floor(Math.random() * 2 ** 32);
+const icon = (n, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const fmtS = s => !isFinite(s) || s < 0 ? '—' : s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : `${Math.round(s)}s`;
+const short = (name, n = 28) => { const s = String(name || '').replace(/\.(safetensors|gguf)$/i, '').replace(/^minimax_h3_/i, ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
 async function api(path, opts = {}) {
   const r = await fetch('/comfy/' + path, opts);
@@ -133,7 +137,8 @@ function setMode(m, { keepForm = false } = {}) {
   if (!keepForm) persistForm();
   S.mode = m;
   save('mode', m);
-  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  $$('#tabs button').forEach(b => { const on = b.dataset.mode === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+  S.sel.clear(); updateBulk();
   if (!keepForm) {
     const d = DEFAULTS[group(m)];
     S.loras = [];
@@ -168,6 +173,8 @@ function refresh() {
   updateDuration();
   renderPresets();
   $('#promptCount').textContent = `${val('prompt').length} chars`;
+  renderBuilder();
+  syncBandSummaries();
 }
 
 function tagsForMode() {
@@ -192,6 +199,319 @@ function insertAtCursor(text) {
   ta.value = ta.value.slice(0, s) + pad + text + ' ' + ta.value.slice(e);
   ta.selectionStart = ta.selectionEnd = s + pad.length + text.length + 1;
   ta.focus(); persistForm(); refresh();
+}
+
+/* ───────── prompt builder ─────────
+   Assembles the fields above into one detailed English paragraph following the official
+   h3-image-prompt-writing guides (docs/prompt-guide-*.md): T2I writes purpose → subject →
+   layout → quoted lettering → light/material → exclusions; editing follows the reference protocol
+   <Picture N> definitions → "The target image …" → per-subject relationships → changed details. */
+const BLD_TYPES = [
+  ['photo', 'Photo', 'A naturalistic photograph of '], ['cinematic', 'Cinematic', 'A cinematic still of '],
+  ['illustration', 'Illustration', 'An illustration of '], ['painting', 'Painting', 'A painting of '],
+  ['poster', 'Poster', 'A poster design: '], ['infographic', 'Infographic', 'An infographic: '],
+  ['ui', 'UI screen', 'A UI screen showing '], ['product', 'Product shot', 'A product shot of '],
+  ['logo', 'Logo / mark', 'A logo mark: '], ['grid', 'Grid / storyboard', 'A grid of panels: '], ['free', 'Free text', ''],
+];
+const BLD_RATIOS = ['1:1', '5:4', '4:3', '3:2', '16:9', '21:9', '4:5', '3:4', '2:3', '9:16'];
+const BLD_RELS = { full: 'fully preserved', partial: 'partially preserved', transfer: 'exact property transfer', weak: 'weak reference' };
+const BLD_REL_HINT = {
+  full: '', partial: 'its shape, position and scale remain while its colour changes',
+  transfer: 'body colour transferred to <Subject 1>', weak: 'style reference for the new background, with freely adapted forms',
+};
+const BLD_REL_TIP = {
+  full: 'Nothing about it changes.',
+  partial: 'Part of it stays — describe what changes in Detail.',
+  transfer: 'Borrows one exact property (colour, material) from this reference.',
+  weak: 'Loose inspiration; the target may adapt freely.',
+};
+const BLD_QUICK = [   // appended to a partial-preservation detail; edits to lock a person's identity
+  'face, facial features, hairstyle and skin tone remain exactly as in the source',
+  'body proportions and apparent age remain',
+  'clothing changes', 'pose, gaze and expression change', 'the background remains unchanged',
+];
+const BLD_TEXT_FIELDS = { 'b-subject': 'subject', 'b-layout': 'layout', 'b-light': 'light', 'b-exclude': 'exclude', 'b-target': 'target', 'b-changes': 'changes' };
+const BLD_EXAMPLES = {
+  t2i: [
+    { label: 'Potter · photograph', type: 'photo', ratio: '', noText: true, texts: [], exclude: 'lettering or additional people',
+      subject: 'a woman potter seated at a pottery wheel in a sunlit workshop, viewed from her left side at approximately hand level; she leans slightly forward with relaxed shoulders and looks down at the clay, her left hand supporting the bowl’s outer wall while the fingertips of her right hand shape the inner surface near the rim',
+      layout: 'a medium composition includes her profile, shoulders, forearms, hands and the complete bowl on the wheel, with enough of the wheel and stool visible to make her working posture clear; a worn wooden workbench and quiet shelves recede out of focus, keeping attention on the hands',
+      light: 'soft sunlight enters from a side window, catching the moisture on the clay and casting gentle shadows beneath her wrists; wet slip coats her fingertips and gathers in fine concentric ridges on the rounded bowl; warm earth tones, believable skin texture and subtle workshop wear give the scene a tactile, unposed quality' },
+    { label: 'Sales dashboard · infographic', type: 'infographic', ratio: '16:9', noText: false, texts: [], exclude: 'invented dates, forecasts, percentage changes or additional data series',
+      subject: 'a clean sales dashboard on a warm white background in a restrained charcoal-and-teal palette with crisp sans-serif typography and a consistent alignment grid, titled “Quarterly sales”, summarizing products A, B and C with 12, 18 and 9 units',
+      layout: 'the title “Quarterly sales” sits at the upper left; two compact summary cards occupy the top row beneath it — “Total units” with the value “39” and “Best-performing product” with “B — 18 units”; the lower left contains a large vertical bar chart whose horizontal axis is labeled “Product” with categories “A”, “B” and “C” in that order and whose vertical axis is labeled “Units” with evenly spaced ticks at 0, 5, 10, 15 and 20, all bars sharing one zero baseline and equal widths, heights corresponding exactly to 12, 18 and 9 with each value printed above its bar, product B teal while A and C share a muted gray, thin horizontal gridlines aiding the scale; the lower right holds a compact table with column headings “Product” and “Units” and rows “A | 12”, “B | 18” and “C | 9”, its B row carrying a subtle teal accent matching the highlighted bar; balanced spacing separates cards, chart and table',
+      light: '' },
+  ],
+  edit: [
+    { label: 'Blue cup · local colour edit', target: 'shows <Subject 1> with a blue finish',
+      subs: [{ what: 'red cup on the left', rel: 'partial', detail: 'its shape, material, position and scale remain while its surface colour changes' },
+             { what: 'lemon on the right', rel: 'full', detail: '' }],
+      changes: 'the blue finish follows the existing surface shading and highlights of <Subject 1>, with the rest of the source image unchanged', texts: [] },
+    { label: 'Fashion poster · property transfer', target: 'is a portrait fashion poster featuring <Subject 1> beneath a short headline',
+      subs: [{ what: 'front-facing beige coat', rel: 'partial', detail: 'its cut, fabric texture, folds and front-facing presentation remain while its colour, scale and placement change' },
+             { what: 'body colour of the vase', rel: 'transfer', detail: 'body colour transferred to <Subject 1>' }],
+      changes: '<Subject 1> is centred in the lower two-thirds of the poster with its full hem and sleeves visible; a new warm off-white background extends evenly to the edges, leaving generous space around the garment',
+      texts: [{ text: 'A quieter kind\nof bold.', where: 'above the coat in large charcoal serif lettering, on two centered lines' }] },
+    { label: 'Café portrait · identity locked', target: 'shows the same woman seated at the café table, turning her head slightly toward the window with a calm, faint smile',
+      subs: [{ what: 'woman in the denim jacket at the centre', rel: 'partial',
+        detail: 'her face, facial features, hairstyle, skin tone and apparent age remain exactly as in <Picture 1>, while her clothing, pose and expression change' }],
+      changes: 'she now wears a rust-coloured chunky knit sweater with visible stitching and sleeves pushed to the wrists, hands loosely wrapped around a white ceramic cup; her shoulders angle three-quarters toward the window with her weight settled into the chair and forearms resting on the table; the corners of her lips lift slightly and her eyes soften toward the light; the blurred café interior and warm side lighting of <Picture 1> continue unchanged',
+      texts: [] },
+  ],
+};
+const bldBlank = kind => kind === 't2i'
+  ? { type: 'photo', subject: '', layout: '', light: '', exclude: '', noText: false, texts: [], ratio: '' }
+  : { subs: [], target: '', changes: '', texts: [] };
+const bldVariant = () => S.mode === 't2i' ? 't2i' : IMG_MODES.includes(S.mode) ? 'edit' : null;
+const bldState = () => S.bld[S.mode] || (S.bld[S.mode] = bldBlank(bldVariant()));
+const saveBld = () => save('builder', S.bld);
+const bq = s => `"${String(s).trim()}"`;
+const bLower = s => /^A[n]? |^The /.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+const bDot = s => /[.!?]$/.test(s.trim()) ? s.trim() : s.trim() + '.';
+const bSent = s => { s = bDot(s); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+function bldTextSentences(list) {
+  const out = [];
+  for (const t of list || []) {
+    const lines = String(t.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    const where = String(t.where || '').trim() || 'in the image';
+    out.push(lines.length === 1 ? `The text ${bq(lines[0])} appears ${where}.`
+      : `The text appears ${where}, arranged on ${lines.length} lines: ${lines.map(bq).join(', then ')}.`);
+  }
+  return out;
+}
+function assemblePrompt() {
+  const b = bldState(), parts = [];
+  if (bldVariant() === 't2i') {
+    const t = BLD_TYPES.find(x => x[0] === b.type) || BLD_TYPES[0], subj = (b.subject || '').trim();
+    if (subj) parts.push(bSent(b.type === 'free' ? subj : t[2] + bLower(subj)));
+    if ((b.layout || '').trim()) parts.push(bSent(b.layout));
+    parts.push(...bldTextSentences(b.texts));
+    if (b.noText) parts.push('No lettering or text appears.');
+    if ((b.light || '').trim()) parts.push(bSent(b.light));
+    const ex = (b.exclude || '').trim().replace(/^no\s+/i, '');
+    if (ex) parts.push(`No ${ex} appear.`);
+  } else {
+    const pics = S.lists[S.mode] || [];
+    const subs = (b.subs || []).map((s, i) => ({ ...s, i }))
+      .filter(s => (s.what || '').trim() && (!pics.length || s.i < pics.length));
+    subs.forEach(s => {
+      const w = (s.what || '').trim();
+      parts.push(/<Picture/i.test(w) ? bDot(`${w.charAt(0).toUpperCase() + w.slice(1)} is <Subject ${s.i + 1}>`)   // free text citing pictures itself
+        : `The ${w.replace(/^(the|a|an)\s+/i, '')} in <Picture ${s.i + 1}> is <Subject ${s.i + 1}>.`);
+    });
+    const tg = (b.target || '').trim();
+    if (tg) parts.push(bSent(/^the target image\b/i.test(tg) ? tg : 'The target image ' + bLower(tg)));
+    subs.forEach(s => {
+      const d = (s.detail || '').trim(), n = `<Subject ${s.i + 1}>`;
+      if (s.rel === 'full') parts.push(`${n} is fully preserved.`);
+      else if (s.rel === 'partial') parts.push(`${n} is partially preserved; ${bDot(d || 'the requested changes are applied')}`);
+      else if (s.rel === 'transfer') parts.push(`${n} supplies the exact ${bDot(d || 'property the target asks for')}`);
+      else parts.push(`${n} serves as a weak ${bDot(d || 'reference for the target, with freely adapted forms')}`);
+    });
+    if ((b.changes || '').trim()) parts.push(bSent(b.changes));
+    parts.push(...bldTextSentences(b.texts));
+  }
+  return parts.join(' ');
+}
+
+function renderBuilder() {
+  const host = $('#builder'), v = bldVariant();
+  if (!host) return;
+  if (!v) { host.classList.add('hidden'); return; }
+  $$('#bldBody [data-bld]').forEach(el => el.classList.toggle('hidden', el.dataset.bld !== v));
+  const b = bldState();
+  for (const [id, key] of Object.entries(BLD_TEXT_FIELDS)) {
+    const el = document.getElementById(id), v = b[key] ?? '';
+    if (el && el.value !== v) el.value = v;   // don't reset the caret when re-rendering mid-typing
+  }
+  setVal('b-noText', !!b.noText); setVal('b-syncRatio', S.bld.syncRatio !== false);
+  if (S.bld.open !== undefined && host.open !== S.bld.open) host.open = S.bld.open;
+  if (v === 't2i') {
+    renderBChips('bType', BLD_TYPES.map(t => [t[0], t[1]]), b.type, x => { b.type = x; saveBld(); renderBuilder(); });
+    renderBChips('bRatio', BLD_RATIOS.map(r => [r, r]), b.ratio || '',
+      x => { b.ratio = b.ratio === x ? '' : x; saveBld(); renderBuilder(); });
+    const t = BLD_TYPES.find(x => x[0] === b.type) || BLD_TYPES[0];
+    $('#bOpenPreview').textContent = t[2] ? `Opening line: “${t[2]}…”` : 'Free text — the Subject field is used exactly as written.';
+  } else renderBSubs(b);
+  renderBTexts(b);
+  renderBExample();
+  updateBldOut();
+}
+function renderBChips(hostId, pairs, cur, onPick) {
+  const host = document.getElementById(hostId);
+  host.innerHTML = '';
+  pairs.forEach(([value, label]) => {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = label;
+    btn.classList.toggle('on', value === cur);
+    btn.onclick = () => onPick(value);
+    host.append(btn);
+  });
+}
+function renderBExample() {
+  const sel = $('#bExample'), list = BLD_EXAMPLES[bldVariant()] || [];
+  sel.innerHTML = '<option value="">Load example…</option>'
+    + list.map((x, i) => `<option value="${i}">${esc(x.label || 'Example ' + (i + 1))}</option>`).join('');
+}
+function renderBSubs(b) {
+  const host = $('#bSubjects'), pics = S.lists[S.mode] || [];
+  while (b.subs.length < pics.length) b.subs.push({ what: '', rel: 'full', detail: '' });
+  host.innerHTML = '';
+  if (!pics.length) { host.innerHTML = '<p class="muted small">Add Pictures above — each slot gets a definition sentence once you name what it contributes.</p>'; return; }
+  pics.forEach((pic, i) => {
+    const s = b.subs[i] || (b.subs[i] = { what: '', rel: 'full', detail: '' });
+    const card = document.createElement('div'); card.className = 'bcard';
+    card.innerHTML = `<div class="bcardhead">
+        ${pic.kind === 'image' ? `<img class="bthumb" src="${viewUrl(pic)}" alt="">` : ''}
+        <span class="tag">&lt;Picture ${i + 1}&gt;</span>
+        <span class="muted small bpicname" title="${esc(pic.filename)}">${esc(pic.filename)}</span></div>
+      <label>What it is <small class="muted">free text may cite pictures, e.g. “The woman in &lt;Picture 1&gt; and the close-up in &lt;Picture 2&gt;”</small>
+        <input class="bwhat" type="text" placeholder="the red cup on the left" value="${esc(s.what)}"></label>
+      <div class="seg brel">${Object.entries(BLD_RELS).map(([k, l]) =>
+        `<label title="${esc(BLD_REL_TIP[k])}"><input type="radio" name="brel${i}" value="${k}" ${s.rel === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <label class="bdet">Detail <small class="muted">what stays and what changes</small>
+        <input type="text" placeholder="${esc(BLD_REL_HINT[s.rel])}" value="${esc(s.detail)}"></label>
+      <div class="presets bquick"></div>`;
+    const what = $('.bwhat', card), det = $('.bdet input', card), quick = $('.bquick', card);
+    const syncDetail = () => { card.querySelector('.bdet').classList.toggle('hidden', s.rel === 'full'); quick.classList.toggle('hidden', s.rel !== 'partial'); };
+    syncDetail();
+    BLD_QUICK.forEach(snip => {
+      const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = snip;
+      btn.onclick = () => { s.detail = s.detail.trim() ? `${s.detail.replace(/[,\s]*$/, '')}, ${snip}` : snip; det.value = s.detail; saveBld(); updateBldOut(); };
+      quick.append(btn);
+    });
+    what.oninput = () => { s.what = what.value; saveBld(); updateBldOut(); };
+    det.oninput = () => { s.detail = det.value; saveBld(); updateBldOut(); };
+    $$('input[type=radio]', card).forEach(r => r.onchange = () => {
+      s.rel = r.value; det.placeholder = BLD_REL_HINT[s.rel]; syncDetail(); saveBld(); updateBldOut();
+    });
+    host.append(card);
+  });
+}
+function renderBTexts(b) {
+  const t2i = $('#bTextsT2i'), edit = $('#bTextsEdit');
+  t2i.innerHTML = ''; edit.innerHTML = '';
+  const host = bldVariant() === 't2i' ? t2i : edit;
+  (b.texts || []).forEach((t, i) => {
+    const row = document.createElement('div'); row.className = 'brow';
+    row.innerHTML = `<label>Text <small class="muted">one line per visual line</small><textarea rows="2" placeholder="MONEY TALKS">${esc(t.text)}</textarea></label>
+      <label>Placement<input type="text" placeholder="above the sign, in large serif capitals" value="${esc(t.where)}"></label>
+      <button type="button" class="ghost" title="Remove" aria-label="Remove">${icon('x')}</button>`;
+    const [ta, where] = [$('textarea', row), $('input[type=text]', row)];
+    ta.oninput = () => { t.text = ta.value; saveBld(); updateBldOut(); };
+    where.oninput = () => { t.where = where.value; saveBld(); updateBldOut(); };
+    $('button', row).onclick = () => { b.texts.splice(i, 1); saveBld(); renderBuilder(); };
+    host.append(row);
+  });
+}
+function updateBldOut() {
+  if (!bldVariant()) return;
+  const b = bldState(), txt = assemblePrompt();
+  $('#bOut').textContent = txt || 'Fill the steps — the assembled paragraph appears here, in the official order.';
+  $('#bOut').classList.toggle('muted', !txt);
+  const est = Math.round(txt.length / 4);
+  $('#bCount').textContent = txt ? `≈ ${est} of 4096 tokens` : '';
+  $('#bCount').classList.toggle('warn', est > 3500);
+  const bud = $('#bBudget');
+  if (bud) {
+    $('#bBudgetFill').style.width = Math.min(100, est / 4096 * 100) + '%';
+    bud.classList.toggle('warn', est > 3500 && est <= 4096);
+    bud.classList.toggle('over', est > 4096);
+  }
+  markBSteps(b);
+  renderBTokChips();
+  const filled = bldVariant() === 't2i'
+    ? [b.subject, b.layout, b.light, b.exclude, b.noText || (b.texts || []).some(t => (t.text || '').trim()), b.ratio].filter(Boolean).length
+    : [b.target, b.changes, (b.texts || []).some(t => (t.text || '').trim()), (b.subs || []).some(s => (s.what || '').trim())].filter(Boolean).length;
+  $('#bldSummary').textContent = txt ? `${filled} step${filled === 1 ? '' : 's'} filled · ≈${est} tokens` : 'step by step · official H3-Image guide';
+}
+/* per-step completion: number chip turns into a green check as each step gets filled */
+function markBSteps(b) {
+  const v = bldVariant();
+  const any = xs => xs.some(x => (x || '').trim());
+  const filled = v === 't2i'
+    ? [b.type, any([b.subject]), any([b.layout]), (b.texts || []).some(t => (t.text || '').trim()), any([b.light]),
+       any([b.exclude]) || b.ratio || !!b.noText]
+    : [(b.subs || []).some(s => (s.what || '').trim()), any([b.target]), any([b.changes]), (b.texts || []).some(t => (t.text || '').trim())];
+  $$('#bldBody [data-step]').forEach(el =>
+    el.classList.toggle('done', !el.classList.contains('hidden') && !!filled[+el.dataset.step - 1]));
+}
+/* one-click reference tags for the edit steps: inserts at the caret of the last focused field */
+let bLastField = null;
+document.addEventListener('focusin', e => { if (e.target.matches('#bldBody textarea, #bldBody input[type=text]')) bLastField = e.target; });
+function renderBTokChips() {
+  const row = $('#bTokRow'); if (!row) return;
+  const v = bldVariant();
+  const tags = v === 'edit'
+    ? [...(S.lists[S.mode] || []).map((_, i) => `<Picture ${i + 1}>`),
+       ...(bldState().subs || []).map((s, i) => `<Subject ${i + 1}>`), '<Video 1>', '<Audio 1>']
+    : [];
+  row.classList.toggle('hidden', !tags.length);
+  if (row.dataset.tags === tags.join(',')) return;   // no rebuild while typing — keeps focus safe
+  row.dataset.tags = tags.join(',');
+  row.innerHTML = '';
+  tags.forEach(t => {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = t;
+    btn.onclick = () => insertTag(t);
+    row.append(btn);
+  });
+}
+function insertTag(t) {
+  const el = bLastField && document.contains(bLastField) ? bLastField : $('#b-target');
+  if (!el) return;
+  const i0 = el.selectionStart ?? el.value.length, i1 = el.selectionEnd ?? i0;
+  el.value = el.value.slice(0, i0) + t + el.value.slice(i1);
+  el.focus();
+  el.selectionStart = el.selectionEnd = i0 + t.length;
+  syncBldField(el);
+}
+/* shared input pipeline for builder fields: state → save → live output */
+function syncBldField(el) {
+  const b = bldState();
+  if (el.id && BLD_TEXT_FIELDS[el.id]) b[BLD_TEXT_FIELDS[el.id]] = el.value;
+  else if (el.classList.contains('bwhat')) {
+    const s = $$('#bSubjects .bcard').indexOf(el.closest('.bcard')); if (s >= 0) b.subs[s].what = el.value;
+  } else if (el.closest('.brow')) {
+    const row = el.closest('.brow'), i = [...$('#bTextsT2i').children, ...$('#bTextsEdit').children].indexOf(row);
+    const t = bldState().texts[i]; if (t) { if (el.tagName === 'TEXTAREA') t.text = el.value; else t.where = el.value; }
+  } else if (el.closest('.bdet')) {
+    const s = $$('#bSubjects .bcard').indexOf(el.closest('.bcard')); if (s >= 0) b.subs[s].detail = el.value;
+  }
+  saveBld(); updateBldOut();
+}
+function applyBld(append) {
+  const txt = assemblePrompt();
+  if (!txt.trim()) return showErr('The builder has nothing to assemble yet — fill at least step 2 (Subject) or step 1 (References).');
+  const ta = $('#prompt');
+  ta.value = append && ta.value.trim() ? `${ta.value.trimEnd()} ${txt}` : txt;
+  S.promptSource = 'builder';
+  const b = bldState();
+  if (!append && bldVariant() === 't2i' && b.ratio && val('b-syncRatio')) {
+    const opt = [...$('#aspect').options].find(o => o.value.startsWith(b.ratio));
+    if (opt) setVal('aspect', opt.value);
+  }
+  persistForm(); refresh();
+  ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  ta.classList.remove('flash'); void ta.offsetWidth; ta.classList.add('flash');
+  setTimeout(() => ta.classList.remove('flash'), 1100);
+  toast('ok', append ? 'Builder draft appended' : 'Prompt replaced', `${txt.length} characters · from the builder steps`);
+}
+function bldExample(idx) {
+  const set = BLD_EXAMPLES[bldVariant()] || [], ex = set[+idx];
+  $('#bExample').value = '';
+  if (!ex) return;
+  S.bld[S.mode] = Object.assign(bldBlank(bldVariant()), JSON.parse(JSON.stringify(ex)));
+  saveBld(); renderBuilder();
+  toast('info', `Example loaded: ${ex.label || 'Example'}`, 'Nothing was overwritten — press Replace prompt to use it.');
+}
+async function bldGuide() {
+  const kind = bldVariant() === 't2i' ? 't2i' : 'edit';
+  try {
+    const r = await fetch(`/docs/prompt-guide-${kind}.md`);
+    if (!r.ok) throw new Error();
+    modal(`<b>Official MiniMax H3-Image ${kind === 't2i' ? 'text-to-image' : 'image-edit'} prompt writing guide</b><pre>${esc(await r.text())}</pre>`);
+  } catch { showErr('Guide file missing: docs/prompt-guide-' + kind + '.md'); }
 }
 
 function imgCanvas() {
@@ -280,7 +600,7 @@ function renderLoras() {
     const row = document.createElement('div'); row.className = 'lrow';
     row.innerHTML = `<label>LoRA ${i + 1}<select>${files.map(f => `<option ${f === l.name ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
       <label>Strength<input type="number" step="0.01" min="-20" max="20" value="${l.strength}"></label>
-      <button type="button" class="ghost" title="Remove">✕</button>`;
+      <button type="button" class="ghost" title="Remove" aria-label="Remove">${icon('x')}</button>`;
     const [sel, num] = [$('select', row), $('input', row)];
     sel.onchange = () => { l.name = sel.value; persistForm(); };
     num.oninput = () => { l.strength = +num.value; persistForm(); };
@@ -313,9 +633,9 @@ function mediaEl(a) {
 function slotEl(a, tag, onRemove) {
   const d = document.createElement('div'); d.className = 'slot';
   const dims = a.w ? `${a.w}×${a.h}` + (a.dur ? ` · ${a.dur.toFixed(1)}s` : '') : '';
-  d.innerHTML = `${mediaEl(a)}<div class="cap"><code>${esc(tag || '')}</code><span class="muted">${dims}</span><button type="button" class="x" title="Remove">✕</button></div>`;
+  d.innerHTML = `<div class="thumb-wrap">${mediaEl(a)}<button type="button" class="x" title="Remove" aria-label="Remove" draggable="false">${icon('x')}</button></div><div class="cap"><code>${esc(tag || '')}</code><span class="muted">${dims}</span></div>`;
   d.title = a.filename;
-  $('.x', d).onclick = onRemove;
+  $('.x', d).onclick = e => { e.stopPropagation(); onRemove(); };
   return d;
 }
 function dropEl(kind, multiple, onFiles) {
@@ -384,7 +704,8 @@ function renderGuides() {
     const mid = document.createElement('div'); mid.className = 'fi';
     mid.innerHTML = `<label>Frame index <small>(negative = from end)</small><input class="fidx" type="number" min="-9999" max="9999" value="${g.frame}"></label><span class="muted small gsec"></span>`;
     row.append(mid);
-    const x = document.createElement('button'); x.type = 'button'; x.className = 'ghost'; x.textContent = '✕';
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'ghost'; x.innerHTML = icon('x');
+    x.title = 'Remove guide'; x.setAttribute('aria-label', 'Remove guide');
     x.onclick = () => { S.guides.splice(i, 1); changed(); };
     row.append(x);
     const inp = $('.fidx', mid);
@@ -529,8 +850,94 @@ function check() {
   return errs;
 }
 
+/* ───────── toasts & dialogs ───────── */
+const T_IC = { info: 'info', ok: 'check', warn: 'warn', error: 'warn' };
+function toast(kind, title, detail) {
+  const host = $('#toasts'); if (!host) return;
+  while (host.children.length >= 4) host.firstChild.remove();
+  const t = document.createElement('div');
+  t.className = `toast ${kind}`;
+  t.innerHTML = `<span class="t-ic">${icon(T_IC[kind] || 'info')}</span><b class="t-title">${esc(title)}</b>`
+    + `<button type="button" class="t-x" aria-label="Dismiss">${icon('x')}</button>`
+    + (detail ? `<span class="t-msg">${esc(detail)}</span>` : '');
+  const ms = kind === 'error' || kind === 'warn' ? 10000 : 5000;
+  let timer = setTimeout(kill, ms);
+  function kill() { t.classList.remove('in'); t.classList.add('out'); setTimeout(() => t.remove(), 220); }
+  t.onmouseenter = () => clearTimeout(timer);
+  t.onmouseleave = () => { timer = setTimeout(kill, 900); };
+  $('.t-x', t).onclick = () => { clearTimeout(timer); kill(); };
+  host.append(t);
+  requestAnimationFrame(() => t.classList.add('in'));
+}
+let confirmResolve = null;
+function confirmDialog(title, detail, { okLabel = 'OK', danger = true } = {}) {
+  return new Promise(res => {
+    confirmResolve = res;
+    modal(`<div class="dlg"><b>${esc(title)}</b><p class="muted">${esc(detail || '')}</p>
+      <div class="dlg-acts"><button type="button" class="ghost" id="cfNo">Cancel</button>
+      <button type="button" class="${danger ? 'dang' : 'primary'}" id="cfYes">${esc(okLabel)}</button></div></div>`);
+    $('#cfNo').onclick = () => closeConfirm(false);
+    $('#cfYes').onclick = () => closeConfirm(true);
+    $('#cfYes').focus();
+  });
+}
+function closeConfirm(v) { const r = confirmResolve; confirmResolve = null; hideModal(); if (r) r(v); }
+function hideModal() { if (LB) return lbClose(); $('#modal').classList.add('hidden'); }
+
+/* ───────── theme (system → light → dark) ───────── */
+const THEME_IC = { system: 'monitor', light: 'sun', dark: 'moon' };
+function applyTheme(t) {
+  if (t === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  const btn = $('#themeBtn');
+  if (btn) { btn.innerHTML = icon(THEME_IC[t]); btn.title = `Theme: ${t} (click to switch)`; }
+}
+function cycleTheme() {
+  const next = { system: 'light', light: 'dark', dark: 'system' }[load('theme', 'system')];
+  save('theme', next); applyTheme(next);
+}
+
+/* ───────── collapsible bands ───────── */
+function initBands() {
+  const saved = load('bands', {});
+  $$('details[data-band]').forEach(d => {
+    d.open = !!saved[d.dataset.band];
+    d.addEventListener('toggle', () => { const b = load('bands', {}); b[d.dataset.band] = d.open; save('bands', b); });
+  });
+}
+const BAND_SUM = {
+  sampling: () => {
+    const parts = [`${val('steps')} steps`, `${val('sampler') || '—'}/${val('scheduler') || '—'}`,
+      `seed ${val('seed')}`, `×${val('batch') || 1}`];
+    if (S.mode !== 'video' && val('aspect') !== 'custom pixels') parts.splice(1, 0, `${val('mp')} MP`);
+    return parts.join(' · ');
+  },
+  models: () => {
+    const l = S.loras.filter(x => x.name !== 'None' && +x.strength).length;
+    return [short(val('model')), val('te') ? 'TE ' + short(val('te'), 14) : '', l ? `${l} LoRA` : ''].filter(Boolean).join(' · ') || 'no model loaded';
+  },
+  output: () => S.mode === 'video'
+    ? `${val('prefix')} · ${val('vFormat')}/${val('vCodec')}${val('vAudio') ? '' : ' · silent'}`
+    : val('prefix'),
+};
+function syncBandSummaries() {
+  $$('details[data-band] .sum').forEach(el => {
+    const fn = BAND_SUM[el.closest('details').dataset.band];
+    if (fn) { try { el.textContent = fn(); } catch { el.textContent = ''; } }
+  });
+}
+
 /* ───────── queue & runs ───────── */
-function showErr(msg) { const e = $('#err'); e.textContent = msg; e.classList.toggle('hidden', !msg); }
+function showErr(msg) {
+  const e = $('#err');
+  if (!msg) { e.classList.add('hidden'); e.innerHTML = ''; return; }
+  const m = String(msg), first = m.split('\n')[0];
+  e.innerHTML = `<div class="err-h">${icon('warn')}<span>${esc(first)}</span>`
+    + `<button type="button" class="err-x" aria-label="Dismiss error">${icon('x')}</button></div>`
+    + (m.includes('\n') || m.length > first.length ? `<pre>${esc(m)}</pre>` : '');
+  e.classList.remove('hidden');
+  toast('error', first.length > 60 ? first.slice(0, 57) + '…' : first, m.includes('\n') ? m.split('\n').slice(1).join('\n') : '');
+}
 function formatNodeErrors(body, graph) {
   const lines = [body.error?.message || body.error || 'Prompt rejected'];
   for (const [id, ne] of Object.entries(body.node_errors || {}))
@@ -559,6 +966,7 @@ async function generate() {
       catch (e) { showErr(e.body ? formatNodeErrors(e.body, graph) : e.message); break; }
       const run = {
         id: res.prompt_id, mode: S.mode, vmode: S.mode === 'video' ? radio('vmode') : null, seed, prompt: val('prompt'),
+        promptSource: S.promptSource || 'raw',
         summary: summary(), loras: S.loras.filter(l => l.name !== 'None' && +l.strength).map(l => `${l.name} @${l.strength}`),
         model: val('model'), status: 'queued', outputs: [], info: '', t0: Date.now(), graph,
         restore: { mode: S.mode, form: snap(), lists: JSON.parse(JSON.stringify(S.lists)), guides: JSON.parse(JSON.stringify(S.guides)) },
@@ -577,8 +985,11 @@ function finish(run, status, error) {
   if (!run || run.status === 'done' || run.status === 'error') return;
   run.status = status; run.error = error || ''; run.t1 = Date.now();
   if (S.active === run.id) S.active = null;
+  if (status === 'error') toast('error', `${run.mode === 'video' ? 'Video' : 'Image'} run failed (seed ${run.seed})`, run.error);
+  else toast('ok', `${run.mode === 'video' ? 'Video' : 'Image'} ready`, `seed ${run.seed} · ${run.summary}`);
   fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
     prompt_id: run.id, status, error: run.error, mode: run.mode, video_mode: run.vmode, prompt: run.prompt, seed: run.seed,
+    prompt_source: run.promptSource || 'raw',
     settings: run.summary, model: run.model, loras: run.loras, run_info: run.info,
     inputs: inputsOf(run.restore), outputs: run.outputs.map(o => loaderName(o).replace(/ \[output\]$/, '')),
     seconds: ((run.t1 - run.t0) / 1000).toFixed(1), graph: run.graph,
@@ -629,7 +1040,7 @@ function livePreview(buf) {
   const type = dv.getUint32(4) === 2 ? 'image/png' : 'image/jpeg';
   const url = URL.createObjectURL(new Blob([buf.slice(8)], { type }));
   let im = $('#livePrev');
-  if (!im) { im = document.createElement('img'); im.id = 'livePrev'; im.style.cssText = 'width:100%;border-radius:8px;margin-top:8px'; $('.runbar').append(im); }
+  if (!im) { im = document.createElement('img'); im.id = 'livePrev'; im.alt = 'live preview'; document.body.append(im); }
   if (im.dataset.url) URL.revokeObjectURL(im.dataset.url);
   im.src = url; im.dataset.url = url;
 }
@@ -647,56 +1058,171 @@ async function pollPending() {      // backstop when websocket messages were mis
     } catch { /* offline */ }
   }
 }
-function setRunbar() {
+function runStatus() {
   const run = S.byId[S.active];
+  if (!run || run.status !== 'running') return null;
+  const el = (Date.now() - (run.tStart || run.t0)) / 1000;
+  const pct = S.prog && S.prog[1] ? Math.min(100, 100 * S.prog[0] / S.prog[1]) : 0;
+  let eta = '';
+  if (S.prog && S.prog[0] > 0) {
+    const r = S.prog[0] / S.prog[1];
+    eta = `~${fmtS(el * (1 - r) / r)}`;
+  }
+  return { run, el, pct, eta };
+}
+function setRunbar() {
+  const st = runStatus();
   const pending = S.runs.filter(r => r.status === 'queued').length;
-  $('#runTitle').textContent = run ? `Running ${run.mode === 'video' ? 'video' : 'image'} · seed ${run.seed}` : pending ? `${pending} waiting` : 'Idle';
-  const pct = run && S.prog ? (100 * S.prog[0] / S.prog[1]) : 0;
-  $('#barFill').style.width = pct + '%';
-  $('#runNode').textContent = run ? `${S.node || ''}${S.prog ? ` · ${S.prog[0]}/${S.prog[1]}` : ''} · ${((Date.now() - (run.tStart || run.t0)) / 1000).toFixed(0)} s` : '';
-  $('#conn').className = 'dot ' + (S.online ? (run ? 'busy' : 'on') : 'off');
-  if (!run) $('#livePrev')?.remove();
+  $('#runTitle').textContent = st ? `RUNNING ${st.run.mode === 'video' ? 'VIDEO' : 'IMAGE'} · seed ${st.run.seed}`
+    : pending ? `${pending} WAITING` : 'IDLE';
+  $('#barFill').style.width = (st ? st.pct : 0) + '%';
+  $('#runPct').textContent = st && st.pct ? `${Math.round(st.pct)}%` : '';
+  $('#runNode').textContent = st ? (S.node || 'starting…') : '';
+  $('#runTime').textContent = st ? fmtS(st.el) : '';
+  $('#runEta').textContent = st ? (st.eta || 'eta —') : '';
+  $('#conn').className = 'dot ' + (S.online ? (st ? 'busy' : 'on') : 'off');
+  if (!st) $('#livePrev')?.remove();
 }
 
-/* ───────── gallery ───────── */
+/* ───────── gallery: contact sheet + filter + multi-select ───────── */
+const MODE_LBL = { t2i: 'Text → Image', i2i: 'Image → Image', multi: 'Multi-image', video: 'Video' };
+function runMatches(r) {
+  const outs = r.outputs || [];
+  if (S.gFilter === 'images' && !outs.some(o => o.kind === 'image')) return false;
+  if (S.gFilter === 'videos' && !outs.some(o => o.kind === 'video')) return false;
+  if (S.gFilter === 'failed' && r.status !== 'error') return false;
+  if (S.gQ) {
+    const q = S.gQ.toLowerCase();
+    if (!(String(r.seed).includes(q) || (r.prompt || '').toLowerCase().includes(q) || String(r.id).toLowerCase().includes(q))) return false;
+  }
+  return true;
+}
+const saveGFilter = () => save('galleryFilter', { f: S.gFilter, q: S.gQ });
+function setGalleryFilter(f) {
+  S.gFilter = f;
+  $$('.gfilter .fbtn').forEach(b => b.classList.toggle('on', b.dataset.filter === f));
+  saveGFilter(); renderGallery();
+}
+function updateBulk() {
+  const bar = $('#bulkBar'); if (!bar) return;
+  bar.classList.toggle('hidden', !S.sel.size);
+  $('#bulkN').textContent = S.sel.size;
+}
 function renderGallery() {
   const host = $('#gallery'); host.innerHTML = '';
-  for (const run of S.runs.slice(0, 60)) {
-    const c = document.createElement('div');
-    const head = `<b>${{ t2i: 'Text → Image', i2i: 'Image → Image', multi: 'Multi-image', video: 'Video' }[run.mode]}</b>${run.vmode ? ` · ${run.vmode}` : ''} · seed ${run.seed}`;
-    if (run.status === 'queued' || run.status === 'running') {
-      c.className = 'card pending'; c.innerHTML = `${head}<br>${run.status}… <span class="muted">${esc(run.summary)}</span>`;
-      host.append(c); continue;
-    }
-    c.className = 'card' + (run.status === 'error' ? ' failed' : '');
-    const media = run.outputs.map((o, i) => o.kind === 'video'
-      ? `<video src="${viewUrl(o)}" controls loop playsinline data-i="${i}"></video>`
-      : `<img src="${viewUrl(o)}" loading="lazy" data-i="${i}" alt="">`).join('');
-    const secs = run.t1 ? ` · ${((run.t1 - (run.tStart || run.t0)) / 1000).toFixed(0)} s` : '';
-    c.innerHTML = `${media}${run.status === 'error' ? `<div class="errtxt">${esc(run.error)}</div>` : ''}
-      <div class="meta">${head}${secs}<p class="muted" title="${esc(run.prompt)}">${esc(run.prompt)}</p>
-      <div class="muted">${esc(run.summary)}${run.loras?.length ? ' · ' + esc(run.loras.join(', ')) : ''}</div></div>
-      <div class="acts"></div>`;
-    const acts = $('.acts', c);
-    const act = (label, fn, title) => { const b = document.createElement('button'); b.textContent = label; if (title) b.title = title; b.onclick = fn; acts.append(b); };
-    const o = run.outputs[0];
-    if (o?.kind === 'image') {
-      const asset = { filename: o.filename, subfolder: o.subfolder, type: o.type, kind: 'image' };
-      act('→ Edit', () => sendTo('i2i', asset), 'Use as Picture 1 in Image → Image');
-      act('+ Ref', () => sendTo('multi', asset), 'Add to Multi-image pictures');
-      act('→ First frame', () => sendTo('first', asset));
-      act('→ Last frame', () => sendTo('last', asset));
-      $$('img', c).forEach(im => { im.draggable = true; im.ondragstart = e => e.dataTransfer.setData('application/x-h3asset', JSON.stringify(asset)); });
-    }
-    if (run.restore) act('↺ Settings', () => restore(run), 'Restore every setting of this run');
-    act('Seed', () => { setVal('seed', run.seed); persistForm(); });
-    if (run.info) act('Info', () => modal(`<pre>${esc(run.info)}</pre>`));
-    if (o) { const a = document.createElement('a'); a.href = viewUrl(o); a.download = o.filename; a.textContent = 'Download'; acts.append(a); }
-    act('✕', () => { S.runs = S.runs.filter(r => r !== run); saveRuns(); renderGallery(); }, 'Remove from list (file stays on disk)');
-    $$('img', c).forEach(im => im.onclick = () => modal(`<img src="${im.src}"><p class="muted small">${esc(run.prompt)}</p>`));
-    host.append(c);
+  const total = { all: S.runs.length, images: 0, videos: 0, failed: 0 };
+  for (const r of S.runs) {
+    if ((r.outputs || []).some(o => o.kind === 'image')) total.images++;
+    if ((r.outputs || []).some(o => o.kind === 'video')) total.videos++;
+    if (r.status === 'error') total.failed++;
   }
-  if (!S.runs.length) host.innerHTML = '<p class="muted">Results appear here. Ctrl+Enter generates.</p>';
+  for (const k of Object.keys(total)) { const el = document.getElementById('fc-' + k); if (el) el.textContent = total[k]; }
+  const shown = S.runs.filter(runMatches).slice(0, 60);
+  S.gShown = shown;
+  if (!shown.length) {
+    const box = document.createElement('div'); box.className = 'gempty';
+    if (!S.runs.length) box.innerHTML = `${icon('inbox', 'i')}<span>Results appear here. <kbd>Ctrl</kbd><kbd>Enter</kbd> generates.</span>`;
+    else box.innerHTML = `${icon('inbox', 'i')}<span>Nothing matches filter “${esc(S.gFilter)}”${S.gQ ? ` or search “${esc(S.gQ)}”` : ''}.</span><br>
+      <button type="button" id="gClearFilter">Clear filters</button>`;
+    host.append(box);
+    $('#gClearFilter')?.addEventListener('click', () => {
+      S.gQ = ''; $('#gSearch').value = ''; setGalleryFilter('all');
+    });
+    updateBulk();
+    return;
+  }
+  for (const run of shown) host.append(cardEl(run, shown));
+  updateBulk();
+}
+function cardEl(run, shown) {
+  const c = document.createElement('div');
+  const head = `<b>${MODE_LBL[run.mode]}</b>${run.vmode ? ` · ${run.vmode}` : ''}`
+    + `${run.promptSource === 'builder' ? ` <span title="Prompt assembled with the Prompt builder">${icon('blocks')}builder</span>` : ''} · seed ${run.seed}`;
+  if (run.status === 'queued' || run.status === 'running') {
+    c.className = `card ${run.status === 'running' ? 'run' : 'queue'}`;
+    c.innerHTML = `<div class="thumb">${icon('clock', 'i play')}<div class="spin"></div></div><div class="meta">${head}<br>${run.status}… <span class="muted">${esc(run.summary)}</span></div>`;
+    return c;
+  }
+  const outs = run.outputs || [];
+  const first = outs[0];
+  const media = first
+    ? (first.kind === 'video'
+        ? `<video src="${viewUrl(first)}" preload="metadata" muted loop playsinline></video>`
+        : `<img src="${viewUrl(first)}" loading="lazy" decoding="async" alt="${esc((run.prompt || 'result').slice(0, 80))}">`)
+    : '';
+  const secs = run.t1 ? ` · ${((run.t1 - (run.tStart || run.t0)) / 1000).toFixed(0)}s` : '';
+  c.className = 'card ' + (run.status === 'error' ? 'error' : 'done') + (S.sel.has(run.id) ? ' sel' : '');
+  c.innerHTML = `<div class="thumb">${media}
+      <span class="tag">${run.status === 'error' ? 'FAILED' : first?.kind === 'video' ? 'VIDEO' : 'IMAGE'}${outs.length > 1 ? ` +${outs.length - 1}` : ''}</span>
+      <label class="sel-box"><input type="checkbox" ${S.sel.has(run.id) ? 'checked' : ''} aria-label="Select run ${esc(run.id)}"></label>
+    </div>
+    <div class="meta">${head}${secs}</div>
+    <div class="prompts"><p title="${esc(run.prompt)}">${esc(run.prompt)}</p></div>
+    ${run.status === 'error' ? `<div class="errtxt">${esc(run.error)}</div>` : ''}
+    <div class="meta"><span>${esc(run.summary)}${run.loras?.length ? ' · ' + esc(run.loras.join(', ')) : ''}</span></div>
+    <div class="acts"></div>`;
+  const acts = $('.acts', c);
+  const act = (ic, title, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.innerHTML = icon(ic); b.title = title; b.setAttribute('aria-label', title);
+    b.onclick = e => { e.stopPropagation(); fn(); };
+    acts.append(b);
+  };
+  if (first?.kind === 'image') {
+    const asset = { filename: first.filename, subfolder: first.subfolder, type: first.type, kind: 'image' };
+    act('send', 'Use as Picture 1 in Image → Image', () => sendTo('i2i', asset));
+    act('plus', 'Add to Multi-image pictures', () => sendTo('multi', asset));
+    act('film', 'Use as first frame', () => sendTo('first', asset));
+    act('film', 'Use as last frame', () => sendTo('last', asset));
+    c.querySelectorAll('img').forEach(im => {
+      im.draggable = true;
+      im.ondragstart = e => e.dataTransfer.setData('application/x-h3asset', JSON.stringify(asset));
+    });
+  }
+  if (run.restore) act('refresh', 'Restore every setting of this run', () => restore(run));
+  act('dice', 'Copy seed into the form', () => { setVal('seed', run.seed); persistForm(); toast('info', 'Seed copied', String(run.seed)); });
+  if (run.info) act('info', 'Run info', () => modal(`<pre>${esc(run.info)}</pre>`));
+  if (first) { const a = document.createElement('a'); a.href = viewUrl(first); a.download = first.filename; a.title = 'Download'; a.setAttribute('aria-label', 'Download'); a.innerHTML = icon('dl'); acts.append(a); }
+  act('trash', 'Remove from list (file stays on disk)', () => { S.runs = S.runs.filter(r => r !== run); delete S.byId[run.id]; S.sel.delete(run.id); saveRuns(); renderGallery(); });
+  const cb = $('.sel-box input', c);
+  cb.onclick = e => e.stopPropagation();
+  cb.onchange = () => {
+    cb.checked ? S.sel.add(run.id) : S.sel.delete(run.id);
+    c.classList.toggle('sel', cb.checked);
+    updateBulk();
+  };
+  $('.thumb', c).onclick = () => lbOpen(shown, shown.indexOf(run), c);
+  return c;
+}
+
+/* lightbox over the filtered list */
+let LB = null;
+function lbOpen(items, i, trigger) { LB = { items, i, trigger }; lbRender(); }
+function lbRender() {
+  const run = LB.items[LB.i];
+  if (!run) { lbClose(); return; }
+  const nav = `<div class="lbbar"><button type="button" class="icon-btn" id="lbPrev" aria-label="Previous run">${icon('arrow-l')}</button>`
+    + `<span class="muted small">${LB.i + 1} / ${LB.items.length} · ${MODE_LBL[run.mode]} · seed ${run.seed}</span>`
+    + `<button type="button" class="icon-btn" id="lbNext" aria-label="Next run">${icon('arrow-r')}</button></div>`;
+  const media = (run.outputs || []).map(o => o.kind === 'video'
+    ? `<video src="${viewUrl(o)}" controls autoplay loop playsinline></video>`
+    : `<img src="${viewUrl(o)}" alt="">`).join('')
+    || `<p class="muted" style="padding:12px">No outputs (still ${run.status}).</p>`;
+  LB.html = nav + media + `<p class="muted small" style="margin:0 14px 12px">${esc(run.prompt)}</p>`;
+  $('#modalBody').innerHTML = LB.html;
+  $('#modal').classList.remove('hidden');
+  $('#lbPrev').onclick = () => lbStep(-1);
+  $('#lbNext').onclick = () => lbStep(1);
+}
+function lbStep(d) {
+  if (!LB) return;
+  LB.i = (LB.i + d + LB.items.length) % LB.items.length;
+  lbRender();
+}
+function lbClose() {
+  const t = LB && LB.trigger; LB = null;
+  $('#modal').classList.add('hidden');
+  if (t && document.contains(t)) t.focus();
 }
 function sendTo(key, asset) {
   measure(asset).then(a => {
@@ -712,7 +1238,8 @@ function restore(run) {
   const r = run.restore;
   persistForm();
   S.mode = r.mode; save('mode', r.mode);
-  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === r.mode));
+  $$('#tabs button').forEach(b => { const on = b.dataset.mode === r.mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+  S.sel.clear(); updateBulk();
   fillModeOptions();
   applySnap(r.form);
   S.lists = JSON.parse(JSON.stringify(r.lists)); S.guides = JSON.parse(JSON.stringify(r.guides || []));
@@ -730,11 +1257,13 @@ async function heartbeat() {
     $('#vram').textContent = d ? `${d.name.replace(/^cuda:\d+\s*/, '').split(':')[0]} · VRAM ${(d.vram_free / 2 ** 30).toFixed(1)}/${(d.vram_total / 2 ** 30).toFixed(1)} GB free` : '';
     $('#connText').textContent = 'ComfyUI ' + (st.system?.comfyui_version || 'online');
     $('#startComfy').classList.add('hidden');
+    $('#stopComfy').classList.remove('hidden');
     if (!was) { await loadInfo(); applySnap(load('form.' + S.mode, null)); renderLoras(); refresh(); pollPending(); }
   } catch {
     S.online = false;
     $('#connText').textContent = 'ComfyUI offline'; $('#vram').textContent = '';
     $('#startComfy').classList.remove('hidden');
+    $('#stopComfy').classList.add('hidden');
   }
   setRunbar();
 }
@@ -745,14 +1274,51 @@ function init() {
   S.runs.forEach(r => { S.byId[r.id] = r; });
   const as = load('assets', null);
   if (as) { Object.assign(S.lists, as.lists); S.guides = as.guides || []; }
+  S.bld = load('builder', {});
+  S.bld.t2i = Object.assign(bldBlank('t2i'), S.bld.t2i);
+  for (const m of ['i2i', 'multi']) S.bld[m] = Object.assign(bldBlank('edit'), S.bld[m]);
   S.mode = load('mode', 't2i');
-  $$('#tabs button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
-  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  applyTheme(load('theme', 'system'));
+  initBands();
+  const gf = load('galleryFilter', { f: 'all', q: '' });
+  S.gFilter = ['all', 'images', 'videos', 'failed'].includes(gf.f) ? gf.f : 'all';
+  S.gQ = gf.q || '';
+  $$('#tabs button').forEach(b => {
+    b.onclick = () => setMode(b.dataset.mode);
+    const on = b.dataset.mode === S.mode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on);
+    b.tabIndex = on ? 0 : -1;
+  });
+  $('#tabs').addEventListener('keydown', e => {
+    const tabs = $$('#tabs button');
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    let n = null;
+    if (e.key === 'ArrowRight') n = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') n = 0;
+    else if (e.key === 'End') n = tabs.length - 1;
+    if (n === null) return;
+    e.preventDefault();
+    setMode(tabs[n].dataset.mode);
+    tabs[n].focus();
+  });
+  $('#gSearch').value = S.gQ;
+  $$('.gfilter .fbtn').forEach(b => b.classList.toggle('on', b.dataset.filter === S.gFilter));
   const d = DEFAULTS[group(S.mode)];
   setVal('steps', d.steps); setVal('prefix', d.prefix);
   applySnap(load('form.' + S.mode, null));
 
   $('#form').addEventListener('input', e => {
+    if (e.target.id === 'prompt') S.promptSource = 'raw';
+    if (e.target.closest('#builder')) {   // builder fields write straight to state; only the preview refreshes
+      const key = BLD_TEXT_FIELDS[e.target.id];
+      if (key) { bldState()[key] = e.target.value; saveBld(); }
+      if (e.target.id === 'b-noText') { bldState().noText = e.target.checked; saveBld(); }
+      if (e.target.id === 'b-syncRatio') { S.bld.syncRatio = e.target.checked; saveBld(); }
+      updateBldOut(); return;
+    }
     if (e.target.id === 'vWidth' || e.target.id === 'vHeight') setVal('vAspect', 'custom');
     if (e.target.matches('[data-persist]')) persistForm();
     if (e.target.name === 'vmode' || e.target.id === 'refVidAudio') changed(); else refresh();
@@ -764,9 +1330,43 @@ function init() {
   $('#addLora').onclick = () => { S.loras.push({ name: turboLora() || 'None', strength: S.mode === 'video' ? 1 : 0.38 }); renderLoras(); persistForm(); };
   $('#addGuideImg').onclick = () => { S.guides.push({ kind: 'image', asset: null, frame: 0 }); changed(); };
   $('#addGuideAud').onclick = () => { S.guides.push({ kind: 'audio', asset: null, frame: 0 }); changed(); };
+  $$('[data-addtext]').forEach(btn => btn.onclick = () => { bldState().texts.push({ text: '', where: '' }); saveBld(); renderBuilder(); });
+  $('#bUse').onclick = () => applyBld(false);
+  $('#bAppend').onclick = () => applyBld(true);
+  $('#bCopy').onclick = async () => {
+    const txt = assemblePrompt();
+    if (!txt.trim()) return toast('warn', 'Nothing to copy', 'Fill at least one step first.');
+    try { await navigator.clipboard.writeText(txt); toast('ok', 'Prompt copied', `${txt.length} characters`); }
+    catch { showErr('Clipboard blocked by the browser — select the text in the preview and copy manually.'); }
+  };
+  $('#bClear').onclick = async () => {
+    if (assemblePrompt().trim()
+      && !await confirmDialog('Clear the builder steps?', 'Your draft for this mode is erased. The prompt box is not touched.', { okLabel: 'Clear steps' })) return;
+    S.bld[S.mode] = bldBlank(bldVariant()); saveBld(); renderBuilder();
+  };
+  $('#bExample').onchange = () => bldExample($('#bExample').value);
+  $('#bGuide').onclick = bldGuide;
+  $('#builder').ontoggle = () => { S.bld.open = $('#builder').open; saveBld(); };
   $('#go').onclick = generate;
-  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); generate(); }
-    if (e.key === 'Escape') $('#modal').classList.add('hidden'); });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      // while writing in the builder, the same shortcut applies the draft instead of generating
+      const inBld = $('#builder')?.open && !$('#builder').classList.contains('hidden') && e.target.closest('#bldBody');
+      if (inBld) applyBld(false); else generate();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (confirmResolve) closeConfirm(false);
+      else if (LB) lbClose();
+      else if (!$('#modal').classList.contains('hidden')) $('#modal').classList.add('hidden');
+      return;
+    }
+    if (LB && !$('#modal').classList.contains('hidden')) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); lbStep(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); lbStep(1); }
+    }
+  });
   document.addEventListener('paste', async e => {
     const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
     if (!files.length) return;
@@ -793,13 +1393,70 @@ function init() {
     await fetch('/api/start-comfy', { method: 'POST' });
     const t = setInterval(async () => { await heartbeat(); if (S.online) { clearInterval(t); $('#startComfy').textContent = 'Start ComfyUI'; } }, 3000);
   };
-  $('#clearGallery').onclick = () => { S.runs = S.runs.filter(r => r.status === 'queued' || r.status === 'running'); saveRuns(); renderGallery(); };
-  $('#modalClose').onclick = () => $('#modal').classList.add('hidden');
-  $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.add('hidden'); };
+  $('#stopComfy').onclick = async () => {
+    if (!await confirmDialog('Stop ComfyUI', 'Any running generation will be cancelled.', { okLabel: 'Stop ComfyUI' })) return;
+    const btn = $('#stopComfy');
+    const done = () => { btn.textContent = 'Stop ComfyUI'; btn.disabled = false; };
+    btn.textContent = 'Stopping…'; btn.disabled = true;
+    try {
+      const r = await fetch('/api/stop-comfy', { method: 'POST' });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || r.statusText);
+      let tries = 0;
+      const t = setInterval(async () => {
+        await heartbeat();
+        if (!S.online || ++tries > 20) {
+          clearInterval(t); done();
+          if (S.online) showErr('ComfyUI is still running.');
+        }
+      }, 1000);
+    } catch (e) { showErr('Could not stop ComfyUI: ' + e.message); done(); }
+  };
+  $('#clearGallery').onclick = async () => {
+    if (S.runs.every(r => r.status === 'queued' || r.status === 'running')) return;
+    if (!await confirmDialog('Clear the results list?', 'Finished runs disappear from the panel; the files stay on disk in ComfyUI.', { okLabel: 'Clear list' })) return;
+    S.runs = S.runs.filter(r => r.status === 'queued' || r.status === 'running');
+    S.sel.clear();
+    saveRuns(); renderGallery();
+  };
+
+  /* gallery filter, search, bulk actions, theme */
+  $('#gSearch').oninput = e => { S.gQ = e.target.value.trim(); saveGFilter(); renderGallery(); };
+  $$('.gfilter .fbtn').forEach(b => b.onclick = () => setGalleryFilter(b.dataset.filter));
+  $('#bulkClear').onclick = () => { S.sel.clear(); renderGallery(); };
+  $('#bulkDel').onclick = async () => {
+    const n = S.sel.size; if (!n) return;
+    if (!await confirmDialog(`Remove ${n} run${n > 1 ? 's' : ''} from the list?`, 'The files stay on disk in ComfyUI.', { okLabel: 'Remove', danger: true })) return;
+    S.runs = S.runs.filter(r => !S.sel.has(r.id));
+    [...S.sel].forEach(id => delete S.byId[id]);
+    S.sel.clear(); saveRuns(); renderGallery();
+    toast('ok', `Removed ${n} run${n > 1 ? 's' : ''}`, 'Files were not deleted.');
+  };
+  $('#bulkDl').onclick = () => {
+    let n = 0;
+    for (const id of S.sel) for (const o of S.byId[id]?.outputs || []) {
+      setTimeout(() => { const a = document.createElement('a'); a.href = viewUrl(o); a.download = o.filename; a.click(); }, n++ * 150);
+    }
+    if (!n) toast('warn', 'Nothing to download', 'The selection has no output files yet.');
+  };
+  $('#bulkEdit').onclick = () => {
+    const assets = [...S.sel].map(id => S.byId[id]).flatMap(r => (r?.outputs || []).filter(o => o.kind === 'image'))
+      .map(o => ({ filename: o.filename, subfolder: o.subfolder, type: o.type, kind: 'image' }));
+    if (!assets.length) return toast('warn', 'Nothing to send', 'Select runs that produced images.');
+    if (assets.length === 1) { sendTo('i2i', assets[0]); return; }
+    if (S.mode !== 'multi') setMode('multi');
+    for (const a of assets) { if (S.lists.multi.length >= 9) break; measure(a).then(m => { S.lists.multi.push(m); changed(); }); }
+    toast('ok', `Sent ${assets.length} images to Multi-image`, 'Each becomes a Picture card (max 9).');
+  };
+  $('#themeBtn').onclick = cycleTheme;
+  $('#err').onclick = e => { if (e.target.closest('.err-x')) showErr(''); };
+  $('#modalClose').onclick = hideModal;
+  $('#modal').onclick = e => { if (e.target.id === 'modal') hideModal(); };
 
   renderLoras(); changed(); renderGallery();
   connectWS(); heartbeat();
   setInterval(heartbeat, 5000);
-  setInterval(() => { if (!S.ws || S.ws.readyState !== 1) pollPending(); setRunbar(); }, 3000);
+  setInterval(setRunbar, 120);   // status strip ticker: elapsed/eta refresh between progress messages
+  setInterval(() => { if (!S.ws || S.ws.readyState !== 1) pollPending(); }, 3000);
 }
 init();
