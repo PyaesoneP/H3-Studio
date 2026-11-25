@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/PyaesoneP/H3-Studio"><img src="assets/logo.svg" width="112" alt="H3 Studio logo" /></a>
+  <a href="https://github.com/PyaesoneP/H3-Studio"><img src="assets/sutdio-logo.svg" width="260" alt="SUTDio logo" /></a>
 </p>
 
 # H3 Studio

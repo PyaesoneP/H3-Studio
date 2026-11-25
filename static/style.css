@@ -110,11 +110,16 @@ header.top {
   position: sticky; top: 0; z-index: 30;
 }
 .brand { display: inline-flex; align-items: baseline; gap: 7px; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
-.brand .logo {
-  display: inline-grid; place-items: center; width: 22px; height: 22px;
-  background: var(--accent); color: var(--accent-ink);
-  font: 700 10px var(--mono); border-radius: var(--r); align-self: center;
+.brand .mark {
+  display: inline-block; height: 22px; width: 22px; align-self: center; flex: none;
 }
+.brand .mark-dark { display: none; }
+html[data-theme="light"] .brand .mark-light { display: block; }
+html[data-theme="light"] .brand .mark-dark { display: none; }
+html:not([data-theme="light"]) .brand .mark-light { display: none; }
+html:not([data-theme="light"]) .brand .mark-dark { display: block; }
+html[data-theme="dark"] .brand .mark-light { display: none; }
+html[data-theme="dark"] .brand .mark-dark { display: block; }
 .brand small { font: 10.5px var(--mono); color: var(--dim); font-weight: 400; }
 .status { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12px; color: var(--dim); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
